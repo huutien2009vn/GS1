@@ -127,7 +127,7 @@ def _build_alerts(payload: AssessmentCreate) -> list[AlertItem]:
             add("Huyết áp", "attention", "Huyết áp cao; nên ghi lại và trao đổi với nhân viên y tế.")
     if v.heart_rate is not None:
         if v.heart_rate < 40 or v.heart_rate > 150:
-            add("Nhịp tim", "alert", "Nhịp tim nằm ngoài vùng an toàn của bản demo; nghỉ yên và đánh giá triệu chứng.")
+            add("Nhịp tim", "alert", "Nhịp tim nằm ngoài vùng an toàn; nghỉ yên và đánh giá triệu chứng.")
         elif v.heart_rate < 50 or v.heart_rate > 110:
             add("Nhịp tim", "attention", "Nhịp tim khác vùng nghỉ thường gặp; đo lại khi cơ thể ổn định.")
     if v.glucose is not None:
@@ -136,7 +136,7 @@ def _build_alerts(payload: AssessmentCreate) -> list[AlertItem]:
         elif v.glucose < 70 or v.glucose > 180:
             add("Đường huyết", "attention", "Đường huyết cần chú ý; đối chiếu thời điểm ăn và hướng dẫn điều trị cá nhân.")
     if not alerts:
-        add("Tổng quan", "safe", "Các chỉ số vừa nhận chưa chạm ngưỡng cảnh báo của bản demo.")
+        add("Tổng quan", "safe", "Các chỉ số vừa nhận chưa chạm ngưỡng cảnh báo.")
     return alerts
 
 
@@ -144,9 +144,9 @@ def _rule_tips(payload: AssessmentCreate, level: str, alerts: list[AlertItem]) -
     tips: list[HealthTip] = []
     profile = payload.profile
     if profile.activity_minutes_week < 150:
-        tips.append(HealthTip(title="Tăng vận động từ từ", action="Thêm 10–15 phút đi bộ nhanh vào 5 ngày mỗi tuần.", reason="Mục tiêu tiến dần tới 150 phút vận động mức vừa mỗi tuần.", priority="medium"))
+        tips.append(HealthTip(title="Tăng vận động từ từ", action="Thêm 10 đến 15 phút đi bộ nhanh vào 5 ngày mỗi tuần.", reason="Mục tiêu tiến dần tới 150 phút vận động mức vừa mỗi tuần.", priority="medium"))
     if profile.bmi >= 25:
-        tips.append(HealthTip(title="Theo dõi cân nặng theo tuần", action="Ưu tiên khẩu phần nhiều rau, đạm nạc và giảm đồ uống có đường.", reason="BMI hiện nằm trên vùng tham chiếu của bản demo.", priority="medium"))
+        tips.append(HealthTip(title="Theo dõi cân nặng theo tuần", action="Ưu tiên khẩu phần nhiều rau, đạm nạc và giảm đồ uống có đường.", reason="BMI hiện cao hơn vùng tham chiếu.", priority="medium"))
     if profile.smoker:
         tips.append(HealthTip(title="Lập kế hoạch bỏ thuốc", action="Chọn một ngày bắt đầu và tìm hỗ trợ từ bác sĩ hoặc chương trình cai thuốc.", reason="Hút thuốc làm tăng rủi ro tim mạch có thể thay đổi được.", priority="high"))
     if any(a.metric == "Huyết áp" for a in alerts):

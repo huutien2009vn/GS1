@@ -3,6 +3,7 @@
 const NS = "http://www.w3.org/2000/svg";
 const HEIGHT = 200;
 const PAD = { top: 14, right: 52, bottom: 30, left: 42 };
+const valueFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
 const pad = n => String(n).padStart(2, "0");
 const dayLabel = d => pad(d.getDate()) + "/" + pad(d.getMonth() + 1);
 const timeLabel = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
@@ -130,7 +131,7 @@ export class TrendChart {
       key.className = "chart-tip-key";
       key.style.background = s.color;
       const value = document.createElement("strong");
-      value.textContent = Math.round(s.values[index] * 10) / 10 + " " + c.unit;
+      value.textContent = valueFormat.format(s.values[index]) + (c.unit === "%" ? "" : " ") + c.unit;
       const label = document.createElement("span");
       label.textContent = s.label;
       row.append(key, value, label);

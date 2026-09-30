@@ -43,7 +43,7 @@ const isEmergency = result => Boolean(result?.alerts?.some(a => a.severity === "
 const levelOf = result => isEmergency(result) ? "emergency" : result.risk_level;
 const isReal = record => (record.vitals?.source || "manual") !== "simulation";
 const DOCUMENT_TYPES = { lab_result: "Kết quả xét nghiệm", prescription: "Đơn thuốc", discharge_note: "Giấy ra viện", imaging_report: "Kết quả chẩn đoán hình ảnh", vaccination: "Tiêm chủng", other: "Tài liệu sức khỏe" };
-const FLAG_NAMES = { normal: "Trong khoảng", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
+const FLAG_NAMES = { normal: "Trong khoảng tham chiếu", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
 const state = { user: null, health: null, records: [], result: null, step: 0, editing: false, rating: 0,
   medicalRecords: [], pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
   deviceSource: null, deviceValues: {}, deviceTimes: {}, samples: [], deviceEpoch: 0, authEpoch: 0, busy: false, view: "dashboard" };
@@ -88,19 +88,23 @@ function date(value, time = true) {
   if (Number.isNaN(parsed.getTime())) return "-";
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", ...(time ? { hour: "2-digit", minute: "2-digit" } : {}) }).format(parsed);
 }
+// Vietnamese number format: decimal comma, at most one decimal; "%" sits directly after the number.
+const NUMBER_FORMAT = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
+const num = value => NUMBER_FORMAT.format(value);
+const withUnit = (value, unit) => value + (unit === "%" ? "" : " ") + unit;
 function valueOf(key, values = {}) {
   if (values[key] == null) return "-";
   if (key === "systolic") return Math.round(values.systolic) + "/" + (values.diastolic == null ? "-" : Math.round(values.diastolic));
-  return key === "spo2" ? String(Math.round(values[key] * 10) / 10) : Math.round(values[key]).toString();
+  return key === "spo2" ? num(values[key]) : Math.round(values[key]).toString();
 }
 function statusOf(key, v) {
   if (v[key] == null) return ["neutral", "Chưa đo"];
   const n = v[key];
-  if (key === "heart_rate") return n < 40 || n > 150 ? ["alert", "Nguy hiểm"] : n < 50 || n > 110 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng"];
-  if (key === "spo2") return n < 90 ? ["alert", "Nguy hiểm"] : n < 95 ? ["attention", "Thấp, cần chú ý"] : ["safe", "Trong ngưỡng"];
-  if (key === "systolic") return n >= 180 || v.diastolic >= 120 ? ["alert", "Nguy hiểm"] : n >= 140 || v.diastolic >= 90 ? ["attention", "Cao, cần chú ý"] : ["safe", "Trong ngưỡng"];
-  if (key === "glucose") return n < 54 || n > 300 ? ["alert", "Nguy hiểm"] : n < 70 || n > 180 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng"];
-  return ["safe", "Trong ngưỡng"];
+  if (key === "heart_rate") return n < 40 || n > 150 ? ["alert", "Nguy hiểm"] : n < 50 || n > 110 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng an toàn"];
+  if (key === "spo2") return n < 90 ? ["alert", "Nguy hiểm"] : n < 95 ? ["attention", "Thấp, cần chú ý"] : ["safe", "Trong ngưỡng an toàn"];
+  if (key === "systolic") return n >= 180 || v.diastolic >= 120 ? ["alert", "Nguy hiểm"] : n >= 140 || v.diastolic >= 90 ? ["attention", "Cao, cần chú ý"] : ["safe", "Trong ngưỡng an toàn"];
+  if (key === "glucose") return n < 54 || n > 300 ? ["alert", "Nguy hiểm"] : n < 70 || n > 180 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng an toàn"];
+  return ["safe", "Trong ngưỡng an toàn"];
 }
 function personalize() {
   $$("[data-user-name]").forEach(el => el.textContent = state.user.display_name);
@@ -152,13 +156,14 @@ function fillWizard(health = null) {
     }).join("");
   }
   $("#onboarding-exit").textContent = state.editing ? "Về hồ sơ" : "Đăng xuất";
+  $("#onboarding-title").textContent = state.editing ? "Sửa hồ sơ sức khỏe" : "Khai báo hồ sơ sức khỏe";
   state.step = 0;
   showStep();
   updateBmi();
 }
 function updateBmi() {
   const h = Number($("#height").value) / 100, w = Number($("#weight").value);
-  $("#bmi-output").textContent = h > 0 && w > 0 ? "Chỉ số BMI: " + (w / h ** 2).toFixed(1) : "Chỉ số BMI được tính từ chiều cao và cân nặng.";
+  $("#bmi-output").textContent = h > 0 && w > 0 ? "Chỉ số BMI: " + num(w / h ** 2) : "Chỉ số BMI được tính từ chiều cao và cân nặng.";
 }
 function showStep() {
   $$("[data-step]").forEach(el => el.hidden = Number(el.dataset.step) !== state.step);
@@ -271,7 +276,7 @@ function renderEmergency(r) {
   $("#emergency-panel").classList.toggle("hidden", !on);
   if (!on) return;
   const values = r.measured_vitals || {};
-  const lines = METRICS.filter(m => statusOf(m.key, values)[0] === "alert").map(m => m.label + ": " + valueOf(m.key, values) + " " + m.unit);
+  const lines = METRICS.filter(m => statusOf(m.key, values)[0] === "alert").map(m => m.label + ": " + withUnit(valueOf(m.key, values), m.unit));
   $("#emergency-title").textContent = "Chỉ số ở mức nguy hiểm";
   $("#emergency-list").innerHTML = lines.map(line => "<li>" + esc(line) + "</li>").join("") + "<li>Đo lúc " + esc(date(r.created_at)) + "</li>";
 }
@@ -311,7 +316,7 @@ function renderTrends() {
     host.classList.toggle("hidden", !points.length);
     card.querySelector(".trend-legend")?.classList.toggle("hidden", !points.length);
     const last = points.at(-1);
-    const latest = last ? spec.series.map(([key]) => Math.round(last.vitals[key] * 10) / 10).join("/") + " " + spec.unit : "";
+    const latest = last ? spec.series.map(([key]) => num(last.vitals[key])).join("/") + (spec.unit === "%" ? "" : " ") + spec.unit : "";
     card.querySelector(".trend-latest").textContent = last ? "Gần nhất: " + latest : "";
     $("#trend-" + id + "-summary").textContent = last ? points.length + " lần đo. Gần nhất " + latest + " lúc " + date(last.created_at) + "." : "";
     if (!points.length) continue;
@@ -356,7 +361,7 @@ function renderHistory() {
     return;
   }
   $("#history-list").innerHTML = '<table class="history-table"><thead><tr><th>Thời gian</th><th>Chỉ số</th><th>Kết quả</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead><tbody>' + records.map(record => {
-    const readings = METRICS.filter(m => record.vitals[m.key] != null).map(m => valueOf(m.key, record.vitals) + " " + m.unit).join(", ");
+    const readings = METRICS.filter(m => record.vitals[m.key] != null).map(m => withUnit(valueOf(m.key, record.vitals), m.unit)).join(", ");
     const level = recordLevel(record);
     return "<tr><td>" + esc(date(record.created_at)) + '<span class="source">' + esc(SOURCE_NAMES[record.vitals.source || "manual"]) + "</span></td><td>" + esc(readings) + '</td><td><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + '</span></td><td><button class="link-button" data-record="' + esc(record.id) + '">Xem chi tiết</button></td></tr>';
   }).join("") + "</tbody></table>";
@@ -377,7 +382,7 @@ async function showResult(id) {
     const r = await api.assessment(id);
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
-    $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p style="margin-top:16px"><a class="btn primary" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p style="margin-top:16px">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : valueOf(m.key, r.measured_vitals) + " " + m.unit) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
+    $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p style="margin-top:16px"><a class="btn primary" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p style="margin-top:16px">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
     $("#delete-assessment").dataset.id = r.id;
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
@@ -420,7 +425,7 @@ function renderProfile() {
     '<dl class="facts facts-2col">' +
       "<div><dt>Tuổi</dt><dd>" + p.age + "</dd></div><div><dt>Giới tính</dt><dd>" + sex + "</dd></div>" +
       "<div><dt>Chiều cao</dt><dd>" + p.height_cm + " cm</dd></div><div><dt>Cân nặng</dt><dd>" + p.weight_kg + " kg</dd></div>" +
-      "<div><dt>BMI</dt><dd>" + bmi.toFixed(1) + ' <span class="fact-note">' + bmiLabel(bmi) + "</span></dd></div><div><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd></div>" +
+      "<div><dt>BMI</dt><dd>" + num(bmi) + ' <span class="fact-note">' + bmiLabel(bmi) + "</span></dd></div><div><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd></div>" +
       "<div><dt>Bệnh đã chẩn đoán</dt><dd>" + esc(conditions.join(", ") || "Không khai báo") + "</dd></div><div><dt>Hút thuốc</dt><dd>" + (p.smoker ? "Có" : "Không") + "</dd></div>" +
       "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>" +
     "</dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" +
@@ -616,7 +621,7 @@ function renderDevice() {
   $("#device-values").classList.toggle("hidden", !hasData);
   $("#device-values").innerHTML = METRICS.map(m => {
     const [severity, text] = statusOf(m.key, v);
-    return "<div><span>" + m.label + "</span><strong>" + valueOf(m.key, v) + " " + m.unit + '</strong> <span class="tag ' + severity + '">' + text + "</span></div>";
+    return "<div><span>" + m.label + "</span><strong>" + withUnit(valueOf(m.key, v), m.unit) + '</strong> <span class="tag ' + severity + '">' + text + "</span></div>";
   }).join("");
   if (!hasData && state.deviceSource) $("#device-message").textContent = "Đang chờ chỉ số từ máy đo. Chỉ số cũ hơn 30 giây sẽ không được lưu.";
 }
