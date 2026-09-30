@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { HealthBleClient, VitalSimulator } from "./ble.js";
 import { VitalChart } from "./chart.js";
-import { icon, hydrateIcons } from "./icons.js";
+import { hydrateIcons } from "./icons.js";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -17,14 +17,18 @@ const MEMBERS = [
   { id: "maternal-grandmother", label: "Bà ngoại", relation: "grandmother", side: "maternal" },
 ];
 const METRICS = [
-  { key: "heart_rate", label: "Nhịp tim", unit: "bpm", icon: "heart" },
-  { key: "systolic", label: "Huyết áp", unit: "mmHg", icon: "pressure" },
-  { key: "spo2", label: "Nồng độ oxy", unit: "% SpO₂", icon: "drop" },
-  { key: "glucose", label: "Đường huyết", unit: "mg/dL", icon: "drop" },
+  { key: "systolic", label: "Huyết áp", unit: "mmHg" },
+  { key: "heart_rate", label: "Nhịp tim", unit: "lần/phút" },
+  { key: "spo2", label: "Oxy trong máu (SpO₂)", unit: "%" },
+  { key: "glucose", label: "Đường huyết", unit: "mg/dL" },
 ];
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
-const LEVELS = { safe: "Chưa có cảnh báo", attention: "Cần chú ý", alert: "Cần kiểm tra sớm" };
-const SOURCE_NAMES = { manual: "Nhập từ máy đo", ble: "Thiết bị kết nối", simulation: "Dữ liệu mẫu" };
+const LEVELS = { safe: "Không có cảnh báo", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm" };
+const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Đo lại vào lần sau và ghi chép đều đặn.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
+const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu" };
+const isEmergency = result => Boolean(result?.alerts?.some(a => a.severity === "alert"));
+const levelOf = result => isEmergency(result) ? "emergency" : result.risk_level;
+const isReal = record => (record.vitals?.source || "manual") !== "simulation";
 const DOCUMENT_TYPES = { lab_result: "Kết quả xét nghiệm", prescription: "Đơn thuốc", discharge_note: "Giấy ra viện", imaging_report: "Kết quả chẩn đoán hình ảnh", vaccination: "Tiêm chủng", other: "Tài liệu sức khỏe" };
 const FLAG_NAMES = { normal: "Trong khoảng", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
 const state = { user: null, health: null, records: [], result: null, step: 0, editing: false, rating: 0,
@@ -50,35 +54,34 @@ function errorAt(id, text = "") {
 }
 function screen(name) {
   ["loading", "login", "onboarding", "app"].forEach(key => $("#" + key + "-screen").classList.toggle("hidden", key !== name));
+  if (name !== "app") document.title = "GeneSense - Theo dõi sức khỏe";
   window.scrollTo(0, 0);
 }
 function date(value, time = true) {
   const parsed = new Date(value?.endsWith?.("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z");
-  if (Number.isNaN(parsed.getTime())) return "—";
+  if (Number.isNaN(parsed.getTime())) return "-";
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", ...(time ? { hour: "2-digit", minute: "2-digit" } : {}) }).format(parsed);
 }
 function valueOf(key, values = {}) {
-  if (values[key] == null) return "—";
-  if (key === "systolic") return Math.round(values.systolic) + "/" + (values.diastolic == null ? "—" : Math.round(values.diastolic));
-  return key === "spo2" ? Number(values[key]).toFixed(1) : Math.round(values[key]).toString();
+  if (values[key] == null) return "-";
+  if (key === "systolic") return Math.round(values.systolic) + "/" + (values.diastolic == null ? "-" : Math.round(values.diastolic));
+  return key === "spo2" ? String(Math.round(values[key] * 10) / 10) : Math.round(values[key]).toString();
 }
 function statusOf(key, v) {
-  if (v[key] == null) return ["neutral", "Chưa có dữ liệu"];
+  if (v[key] == null) return ["neutral", "Chưa đo"];
   const n = v[key];
-  if (key === "heart_rate") return n < 40 || n > 150 ? ["alert", "Cần kiểm tra"] : n < 50 || n > 110 ? ["attention", "Chú ý"] : ["safe", "Đã ghi nhận"];
-  if (key === "spo2") return n < 90 ? ["alert", "Cần kiểm tra"] : n < 95 ? ["attention", "Chú ý"] : ["safe", "Đã ghi nhận"];
-  if (key === "systolic") return n >= 180 || v.diastolic >= 120 ? ["alert", "Cần kiểm tra"] : n >= 140 || v.diastolic >= 90 ? ["attention", "Chú ý"] : ["safe", "Đã ghi nhận"];
-  if (key === "glucose") return n < 54 || n > 300 ? ["alert", "Cần kiểm tra"] : n < 70 || n > 180 ? ["attention", "Chú ý"] : ["safe", "Đã ghi nhận"];
-  return ["safe", "Đã ghi nhận"];
+  if (key === "heart_rate") return n < 40 || n > 150 ? ["alert", "Nguy hiểm"] : n < 50 || n > 110 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng"];
+  if (key === "spo2") return n < 90 ? ["alert", "Nguy hiểm"] : n < 95 ? ["attention", "Thấp, cần chú ý"] : ["safe", "Trong ngưỡng"];
+  if (key === "systolic") return n >= 180 || v.diastolic >= 120 ? ["alert", "Nguy hiểm"] : n >= 140 || v.diastolic >= 90 ? ["attention", "Cao, cần chú ý"] : ["safe", "Trong ngưỡng"];
+  if (key === "glucose") return n < 54 || n > 300 ? ["alert", "Nguy hiểm"] : n < 70 || n > 180 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng"];
+  return ["safe", "Trong ngưỡng"];
 }
 function personalize() {
   $$("[data-user-name]").forEach(el => el.textContent = state.user.display_name);
-  const initials = state.user.display_name.trim().split(/\s+/).slice(-2).map(word => word[0]).join("").toUpperCase();
-  $$("[data-avatar]").forEach(el => el.textContent = initials || "B");
-  $$("[data-account-type]").forEach(el => el.textContent = state.user.provider === "google" ? "Tài khoản Google" : "Hồ sơ trải nghiệm");
-  $("#greeting").innerHTML = "Chào " + esc(state.user.display_name) + ' <span class="greeting-sun">' + icon("sun") + "</span>";
+  $("#greeting").textContent = "Xin chào, " + state.user.display_name;
   $("#demo-banner").classList.toggle("hidden", !state.user.is_demo);
-  $("#today-date").textContent = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "long" }).format(new Date());
+  const today = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" }).format(new Date());
+  $("#today-date").textContent = today.charAt(0).toUpperCase() + today.slice(1);
 }
 function navigate(view) {
   if (!state.user || !state.health) return;
@@ -89,7 +92,7 @@ function navigate(view) {
     if (button.dataset.nav === state.view) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  $("#page-name").textContent = { dashboard: "Hôm nay", records: "Hồ sơ sức khỏe", history: "Lịch sử theo dõi", profile: "Hồ sơ & gia đình" }[state.view];
+  document.title = { dashboard: "Hôm nay", records: "Giấy tờ sức khỏe", history: "Lịch sử đo", profile: "Hồ sơ" }[state.view] + " - GeneSense";
   window.history.replaceState(null, "", "#" + state.view);
   if (state.view === "profile") renderProfile();
   if (state.view === "records") renderMedicalRecords();
@@ -129,15 +132,15 @@ function fillWizard(health = null) {
 }
 function updateBmi() {
   const h = Number($("#height").value) / 100, w = Number($("#weight").value);
-  $("#bmi-output").textContent = h > 0 && w > 0 ? "BMI ước tính: " + (w / h ** 2).toFixed(1) + " · Tính từ chiều cao và cân nặng của bạn." : "BMI sẽ được tính từ chiều cao và cân nặng.";
+  $("#bmi-output").textContent = h > 0 && w > 0 ? "Chỉ số BMI: " + (w / h ** 2).toFixed(1) : "Chỉ số BMI được tính từ chiều cao và cân nặng.";
 }
 function showStep() {
   $$("[data-step]").forEach(el => el.hidden = Number(el.dataset.step) !== state.step);
   $$("[data-step-indicator]").forEach(el => { el.classList.toggle("active", Number(el.dataset.stepIndicator) === state.step); el.classList.toggle("done", Number(el.dataset.stepIndicator) < state.step); });
-  $("#step-caption").textContent = "BƯỚC " + (state.step + 1) + " / 3";
+  $("#step-caption").textContent = "Bước " + (state.step + 1) + " trên 3";
   $("#onboarding-progress").value = state.step + 1;
   $("#step-back").hidden = state.step === 0;
-  $("#step-next").innerHTML = (state.step === 2 ? (state.editing ? "Lưu thay đổi" : "Hoàn tất hồ sơ") : "Tiếp tục") + " " + icon("arrow");
+  $("#step-next").textContent = state.step === 2 ? (state.editing ? "Lưu thay đổi" : "Hoàn tất") : "Tiếp tục";
   errorAt("#onboarding-error");
 }
 function validCurrentStep() {
@@ -191,71 +194,78 @@ async function nextStep(event) {
     screen("app");
     await refreshRecords();
     navigate(wasEditing ? "profile" : "dashboard");
-    toast(wasEditing ? "Hồ sơ của bạn đã được cập nhật." : "Hồ sơ đã sẵn sàng. Chào mừng bạn đến với GeneSense.");
+    toast(wasEditing ? "Đã lưu hồ sơ." : "Đã lưu hồ sơ. Bạn có thể ghi chỉ số đầu tiên.");
   } catch (error) { errorAt("#onboarding-error", error.message); }
   finally { button.disabled = false; button.innerHTML = original; }
 }
 
-function sparkline(key) {
-  const source = state.result?.measurement_source;
-  const data = state.records.filter(record => (record.vitals.source || "manual") === source && record.vitals[key] != null).slice(0, 15).reverse().map(row => row.vitals[key]);
-  if (data.length < 2) return '<svg class="sparkline" viewBox="0 0 160 29" preserveAspectRatio="none" aria-hidden="true"><path d="M0 19H160" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4"/></svg>';
-  const min = Math.min(...data), span = Math.max(1, Math.max(...data) - min);
-  const points = data.map((value, index) => (index * 160 / (data.length - 1)).toFixed(1) + "," + (23 - 17 * (value - min) / span).toFixed(1)).join(" ");
-  return '<svg class="sparkline" viewBox="0 0 160 29" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + points + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-}
 function renderMetrics() {
   const values = state.result?.measured_vitals || {};
   $("#metric-grid").innerHTML = METRICS.map(m => {
     const [level, status] = statusOf(m.key, values);
-    return '<article class="card metric-card ' + m.key + '"><div class="metric-top"><span class="icon-box">' + icon(m.icon) + '</span><span class="badge ' + level + '">' + status + '</span></div><span class="metric-label">' + m.label + '</span><div class="metric-reading"><strong>' + valueOf(m.key, values) + '</strong><span>' + m.unit + "</span></div>" + sparkline(m.key) + '<div class="metric-bottom"><span>Lần ghi nhận mới nhất</span><strong>' + (values[m.key] == null ? "Chưa đo" : "Đã lưu") + "</strong></div></article>";
+    const measured = values[m.key] != null;
+    const flag = level === "attention" || level === "alert" ? '<span class="reading-flag flag-' + level + '">' + status + "</span>" : "";
+    return '<div class="reading"><span class="reading-name">' + m.label + "</span>" + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></span>" : '<span class="reading-value empty">Chưa đo</span>') + flag + "</div>";
   }).join("");
 }
 function renderTips() {
   const tips = state.result?.insight.tips || [
-    { title: "Bắt đầu với một chỉ số", action: "Bạn có thể ghi riêng nhịp tim hoặc huyết áp. Không cần có đầy đủ các chỉ số để bắt đầu." },
-    { title: "Giữ điều kiện đo nhất quán", action: "Nghỉ ngơi trước khi đo, rồi làm theo hướng dẫn đi kèm máy đo của bạn." },
-    { title: "Hỏi thêm từ gia đình", action: "Nếu còn thông tin chưa rõ, một cuộc trò chuyện với bố mẹ có thể giúp bổ sung hồ sơ." },
+    { title: "Bắt đầu với một chỉ số", action: "Có thể chỉ nhập huyết áp hoặc nhịp tim. Không cần đủ tất cả chỉ số." },
+    { title: "Đo trong cùng điều kiện", action: "Ngồi nghỉ 5 phút trước khi đo và làm theo hướng dẫn của máy đo." },
+    { title: "Hỏi thêm người thân", action: "Nếu chưa rõ tiền sử bệnh trong gia đình, hãy hỏi bố mẹ rồi cập nhật hồ sơ." },
   ];
-  $("#tip-list").innerHTML = tips.slice(0, 4).map((tip, index) => '<div class="tip-item"><span class="icon-box">' + icon(["leaf", "heart", "family", "shield"][index]) + '</span><div><strong>' + esc(tip.title) + "</strong><p>" + esc(tip.action) + "</p></div></div>").join("");
-  $("#follow-up").textContent = state.result?.insight.follow_up || "Lời khuyên sẽ được điều chỉnh sau mỗi lần đánh giá.";
+  $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => "<li><strong>" + esc(tip.title) + ".</strong> " + esc(tip.action) + "</li>").join("");
+  $("#follow-up").textContent = state.result?.insight.follow_up || "";
 }
 function alertsMarkup(result) {
   return result.alerts.filter(a => a.severity !== "safe").map(a => '<div class="alert-item ' + a.severity + '"><strong>' + esc(a.metric) + ":</strong> " + esc(a.message) + "</div>").join("");
 }
+function renderEmergency(r) {
+  const on = isEmergency(r);
+  $("#emergency-panel").classList.toggle("hidden", !on);
+  if (!on) return;
+  const values = r.measured_vitals || {};
+  const lines = METRICS.filter(m => statusOf(m.key, values)[0] === "alert").map(m => m.label + ": " + valueOf(m.key, values) + " " + m.unit);
+  $("#emergency-title").textContent = "Chỉ số ở mức nguy hiểm";
+  $("#emergency-list").innerHTML = lines.map(line => "<li>" + esc(line) + "</li>").join("") + "<li>Đo lúc " + esc(date(r.created_at)) + "</li>";
+}
 function renderDashboard() {
   const r = state.result;
-  const visual = $("#risk-visual");
-  visual.className = "risk-visual " + (r ? r.risk_level : "empty");
-  $("#risk-score").textContent = r ? Math.round(r.scores.overall) : "—";
-  $("#risk-score-label").textContent = r ? "điểm sàng lọc" : "Chưa đánh giá";
-  $("#risk-status").className = "badge " + (r?.risk_level || "neutral");
-  $("#risk-status").textContent = r ? LEVELS[r.risk_level] : "Sẵn sàng bắt đầu";
-  $("#risk-title").textContent = r ? ({ safe: "Tiếp tục quan tâm đến bản thân.", attention: "Có điều cần bạn chú ý.", alert: "Ưu tiên kiểm tra sức khỏe." }[r.risk_level]) : "Lắng nghe cơ thể, từ hôm nay.";
-  $("#risk-summary").textContent = r?.insight.summary || "Ghi chỉ số từ máy đo của bạn để nhận bản tổng quan đầu tiên.";
-  $("#result-date").textContent = r ? date(r.created_at) : "Chưa có lần theo dõi";
-  $("#measure-from-summary").innerHTML = (r ? "Ghi thêm chỉ số" : "Bắt đầu theo dõi") + " " + icon("arrow");
+  const level = r ? levelOf(r) : "neutral";
+  renderEmergency(r);
+  const status = $("#risk-status");
+  status.className = "status-word " + (level === "emergency" ? "alert" : level);
+  status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
+  $("#risk-summary").textContent = r ? (level === "emergency" ? SUMMARY_FALLBACK.emergency : r.insight.summary || SUMMARY_FALLBACK[level]) : "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên.";
+  $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() + (r.measurement_source === "simulation" ? " (không phải dữ liệu thật)" : "") : "";
   $("#score-details").classList.toggle("hidden", !r);
-  $("#result-alerts").innerHTML = r ? alertsMarkup(r) + (KEYS.filter(key => r.measured_vitals?.[key] != null).length < 5 ? '<p class="result-footnote">Kết quả chỉ dựa trên những chỉ số đã cung cấp; các chỉ số chưa đo không được coi là bình thường.</p>' : "") : "";
-  if (r) ["pgrs", "brs", "vital"].forEach(key => { const value = r.scores[key === "vital" ? "vitals" : key]; $("#" + key + "-score").textContent = Math.round(value); $("#" + key + "-progress").value = value; });
-  $("#measurement-context").textContent = r ? SOURCE_NAMES[r.measurement_source] + " · " + date(r.created_at) + (r.measurement_source === "simulation" ? " · Chỉ để trải nghiệm" : "") : "Chưa có dữ liệu. Bạn có thể nhập từ máy đo hoặc kết nối thiết bị.";
+  $("#result-alerts").innerHTML = r && level !== "emergency" ? alertsMarkup(r) : "";
+  if (r) {
+    $("#risk-score").textContent = Math.round(r.scores.overall);
+    ["pgrs", "brs", "vital"].forEach(key => { $("#" + key + "-score").textContent = Math.round(r.scores[key === "vital" ? "vitals" : key]); });
+  }
+  const hiddenSims = r && isReal({ vitals: { source: r.measurement_source } }) && state.records.some(row => !isReal(row));
+  $("#measurement-context").textContent = r ? (hiddenSims ? "Không tính dữ liệu mẫu" : "") : "";
   renderMetrics();
 }
 function renderChart() {
   const key = $("#chart-metric").value;
   const source = state.result?.measurement_source;
   const rows = state.records.filter(row => (row.vitals.source || "manual") === source && row.vitals[key] != null).slice(0, 30).reverse();
-  $("#chart-context").textContent = rows.length ? rows.length + " lần ghi nhận · " + SOURCE_NAMES[source] : "Các lần theo dõi gần đây";
+  $("#chart-context").textContent = rows.length ? rows.length + " lần đo, " + (source === "simulation" ? "dữ liệu mẫu" : "dữ liệu của bạn") : "";
   $("#chart-empty").classList.toggle("hidden", rows.length > 0);
   chart.setData(key, rows.map(row => ({ value: row.vitals[key], timestamp: row.created_at })));
+}
+function pickCurrent(rows) {
+  return rows.find(isReal) || rows[0] || null;
 }
 async function refreshRecords() {
   const epoch = state.authEpoch;
   try {
     const rows = await api.history();
     if (epoch !== state.authEpoch) return;
-    let result = null;
-    if (rows.length) result = await api.assessment(rows[0].id);
+    const current = pickCurrent(rows);
+    const result = current ? await api.assessment(current.id) : null;
     if (epoch !== state.authEpoch) return;
     state.records = rows; state.result = result;
     renderDashboard(); renderHistory();
@@ -266,58 +276,64 @@ async function refreshRecords() {
     $("#history-list").innerHTML = '<div class="empty-state"><h3>Chưa tải được lịch sử</h3><p>' + esc(error.message) + '</p><button class="btn outline" id="retry-history">Thử lại</button></div>';
   }
 }
+function recordLevel(record) {
+  const v = record.vitals || {};
+  return METRICS.some(m => statusOf(m.key, v)[0] === "alert") ? "emergency" : record.risk_level;
+}
 function renderHistory() {
   const filter = $("#history-filter").value;
-  const records = state.records.filter(row => filter === "all" || (filter === "simulation" ? row.vitals.source === "simulation" : row.vitals.source !== "simulation"));
+  const records = state.records.filter(row => filter === "all" || (filter === "simulation" ? !isReal(row) : isReal(row)));
   if (!records.length) {
-    $("#history-list").innerHTML = '<div class="empty-state">' + icon("history") + "<h3>" + (state.records.length ? "Chưa có bản ghi phù hợp" : "Hành trình của bạn bắt đầu từ đây.") + '</h3><p>Ghi lại lần đo đầu tiên để dễ dàng theo dõi những thay đổi.</p><button class="btn outline" id="history-add">Ghi chỉ số mới</button></div>';
+    $("#history-list").innerHTML = '<div class="empty-state"><h3>' + (state.records.length ? "Không có lần đo phù hợp" : "Chưa có lần đo nào") + '</h3><p>Các lần đo sẽ hiện ở đây sau khi bạn ghi chỉ số.</p><button class="btn outline" id="history-add">Ghi chỉ số</button></div>';
     return;
   }
-  $("#history-list").innerHTML = records.map(record => {
-    const parts = date(record.created_at, false).split("/");
-    const readings = METRICS.filter(m => record.vitals[m.key] != null).map(m => valueOf(m.key, record.vitals) + " " + m.unit).join(" · ");
-    return '<div class="history-row"><div class="date-tile"><strong>' + esc(parts[0]) + "</strong><small>tháng " + esc(parts[1]) + '</small></div><div class="history-row-main"><strong>' + esc(date(record.created_at)) + "</strong><p>" + esc(readings) + '</p><p>' + esc(SOURCE_NAMES[record.vitals.source || "manual"]) + '</p></div><span class="badge ' + record.risk_level + '">' + LEVELS[record.risk_level] + '</span><button class="link-button" data-record="' + esc(record.id) + '">Chi tiết ' + icon("chevron") + "</button></div>";
-  }).join("");
+  $("#history-list").innerHTML = '<table class="history-table"><thead><tr><th>Thời gian</th><th>Chỉ số</th><th>Kết quả</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead><tbody>' + records.map(record => {
+    const readings = METRICS.filter(m => record.vitals[m.key] != null).map(m => valueOf(m.key, record.vitals) + " " + m.unit).join(", ");
+    const level = recordLevel(record);
+    return "<tr><td>" + esc(date(record.created_at)) + '<span class="source">' + esc(SOURCE_NAMES[record.vitals.source || "manual"]) + "</span></td><td>" + esc(readings) + '</td><td><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + '</span></td><td><button class="link-button" data-record="' + esc(record.id) + '">Xem chi tiết</button></td></tr>';
+  }).join("") + "</tbody></table>";
 }
 async function showResult(id) {
   const epoch = state.authEpoch;
   try {
     const r = await api.assessment(id);
     if (epoch !== state.authEpoch) return;
-    $("#result-detail").innerHTML = '<p class="subtle">' + date(r.created_at) + " · " + esc(SOURCE_NAMES[r.measurement_source]) + '</p><span class="badge ' + r.risk_level + '">' + LEVELS[r.risk_level] + "</span><p style=\"margin-top:16px\">" + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + valueOf(m.key, r.measured_vitals || {}) + " " + m.unit + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + '<p class="follow-up">' + esc(r.insight.follow_up) + "</p>";
+    const level = levelOf(r);
+    $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p style="margin-top:16px"><a class="btn primary" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p style="margin-top:16px">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : valueOf(m.key, r.measured_vitals) + " " + m.unit) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
 }
 function renderProfile() {
   const h = state.health, p = h.profile;
-  const conditions = p.known_conditions.map(key => CONDITIONS.find(([id]) => id === key)?.[1]).filter(Boolean);
-  const familySection = (side, title, notes) => '<article class="card profile-card"><h2>' + title + '</h2>' + MEMBERS.filter(m => m.side === side).map(m => {
+  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
+  const conditions = p.known_conditions.map(conditionName).filter(Boolean);
+  const familySection = (side, title, notes) => '<article class="panel' + (side === "immediate" ? " full" : "") + '"><h2>' + title + '</h2><dl class="facts">' + MEMBERS.filter(m => m.side === side).map(m => {
     const saved = h.family_history.find(row => row.member_id === m.id);
-    const text = saved?.knowledge === "none" ? "Không có bệnh đã biết" : saved?.conditions?.length ? saved.conditions.map(key => CONDITIONS.find(([id]) => id === key)?.[1]).join(", ") : "Chưa rõ";
-    return '<div class="family-read-row"><strong>' + m.label + "</strong><span>" + esc(text) + "</span></div>";
-  }).join("") + (notes ? "<h3>Điều bạn chia sẻ</h3><p>" + esc(notes) + "</p>" : "") + "</article>";
-  $("#profile-content").innerHTML = '<div class="profile-grid"><article class="card profile-card"><div class="profile-person"><span class="avatar">' + esc(state.user.display_name.trim()[0]) + '</span><div><h2>' + esc(h.display_name) + "</h2><p>" + esc(state.user.email || "Tài khoản trải nghiệm") + '</p></div></div><dl class="profile-facts"><div><dt>Tuổi</dt><dd>' + p.age + '</dd></div><div><dt>Cân nặng</dt><dd>' + p.weight_kg + ' kg</dd></div><div><dt>BMI</dt><dd>' + (p.weight_kg / (p.height_cm / 100) ** 2).toFixed(1) + '</dd></div></dl><h3>Về sức khỏe của bạn</h3><p>' + esc(h.personal_notes || "Chưa có ghi chú. Bạn có thể thêm điều muốn theo dõi.") + "</p><h3>Bệnh đã được chẩn đoán</h3><p>" + esc(conditions.join(", ") || "Chưa khai báo bệnh") + "</p><h3>Thói quen</h3><p>" + p.activity_minutes_week + " phút vận động/tuần · " + (p.smoker ? "Đang hút thuốc" : "Không hút thuốc") + "</p></article>" + familySection("immediate", "Gia đình gần gũi") + familySection("paternal", "Bên nội · Gia đình phía bố", h.paternal_notes) + familySection("maternal", "Bên ngoại · Gia đình phía mẹ", h.maternal_notes) + '<article class="card profile-card full"><div class="profile-preferences"><div><h2>Quyền riêng tư & cá nhân hóa</h2><p>AI hỗ trợ diễn giải: ' + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + '. Hồ sơ và ghi chú của bạn được lưu riêng theo tài khoản.</p></div><button class="link-button" id="edit-preferences">Thay đổi lựa chọn ' + icon("arrow") + '</button></div><button id="profile-logout" class="logout-button">' + icon("logout") + "Đăng xuất tài khoản</button></article></div>";
+    const text = saved?.knowledge === "none" ? "Không có bệnh đã biết" : saved?.conditions?.length ? saved.conditions.map(conditionName).join(", ") : "Chưa rõ";
+    return "<dt>" + m.label + "</dt><dd>" + esc(text) + "</dd>";
+  }).join("") + "</dl>" + (notes ? "<h3>Ghi chú</h3><p>" + esc(notes) + "</p>" : "") + "</article>";
+  $("#profile-content").innerHTML = '<div class="profile-grid"><article class="panel full"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.user.email || "Hồ sơ mẫu") + '</p><dl class="facts"><dt>Tuổi</dt><dd>' + p.age + "</dd><dt>Chiều cao</dt><dd>" + p.height_cm + " cm</dd><dt>Cân nặng</dt><dd>" + p.weight_kg + " kg</dd><dt>BMI</dt><dd>" + (p.weight_kg / (p.height_cm / 100) ** 2).toFixed(1) + "</dd><dt>Bệnh đã chẩn đoán</dt><dd>" + esc(conditions.join(", ") || "Không khai báo") + "</dd><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd><dt>Hút thuốc</dt><dd>" + (p.smoker ? "Có" : "Không") + "</dd><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" + familySection("immediate", "Bố, mẹ và anh chị em") + familySection("paternal", "Bên nội", h.paternal_notes) + familySection("maternal", "Bên ngoại", h.maternal_notes) + "</div>";
 }
 
 function analysisMarkup(analysis) {
   const metricRows = analysis.metrics?.length ? '<div class="extracted-metrics">' + analysis.metrics.map(metric => {
     const badge = metric.flag === "normal" ? "safe" : metric.flag === "unknown" ? "neutral" : "attention";
-    return '<div><span><strong>' + esc(metric.name) + '</strong><small>' + esc(metric.reference_range ? "Tham chiếu: " + metric.reference_range : "Không có khoảng tham chiếu") + '</small></span><span class="metric-value">' + esc(metric.value) + " " + esc(metric.unit) + '</span><span class="badge ' + badge + '">' + esc(FLAG_NAMES[metric.flag] || "Chưa rõ") + "</span></div>";
+    return '<div><span><strong>' + esc(metric.name) + '</strong><small>' + esc(metric.reference_range ? "Tham chiếu: " + metric.reference_range : "Không có khoảng tham chiếu") + '</small></span><span class="metric-value">' + esc(metric.value) + " " + esc(metric.unit) + '</span><span class="tag ' + badge + '">' + esc(FLAG_NAMES[metric.flag] || "Chưa rõ") + "</span></div>";
   }).join("") + "</div>" : "";
   const list = (title, values, tone = "") => values?.length ? '<section class="extracted-list ' + tone + '"><strong>' + title + '</strong><ul>' + values.map(value => "<li>" + esc(value) + "</li>").join("") + "</ul></section>" : "";
-  const medications = analysis.medications?.length ? '<section class="extracted-list"><strong>Thuốc được ghi trên tài liệu</strong><ul>' + analysis.medications.map(item => "<li>" + esc(item.name) + (item.dose ? " · " + esc(item.dose) : "") + (item.frequency ? " · " + esc(item.frequency) : "") + "</li>").join("") + "</ul></section>" : "";
-  return '<div class="analysis-summary"><div class="record-meta"><span class="badge blue">' + esc(DOCUMENT_TYPES[analysis.document_type] || "Tài liệu sức khỏe") + '</span><span>' + esc(analysis.document_date ? date(analysis.document_date, false) : "Không rõ ngày") + '</span><span>' + esc(analysis.provider || "Không rõ cơ sở") + '</span></div><h3>' + esc(analysis.title) + '</h3><p>' + esc(analysis.summary) + "</p></div>" + metricRows + list("Thông tin bệnh được ghi", analysis.conditions) + medications + list("Đề xuất được ghi trên tài liệu", analysis.recommendations) + list("Điểm cần kiểm tra lại", analysis.warnings, "warning") + '<p class="analysis-disclaimer">' + icon("info") + esc(analysis.disclaimer) + "</p>";
+  const medications = analysis.medications?.length ? '<section class="extracted-list"><strong>Thuốc được ghi trên tài liệu</strong><ul>' + analysis.medications.map(item => "<li>" + esc(item.name) + (item.dose ? ", " + esc(item.dose) : "") + (item.frequency ? ", " + esc(item.frequency) : "") + "</li>").join("") + "</ul></section>" : "";
+  return '<div class="analysis-summary"><div class="record-meta"><span>' + esc(DOCUMENT_TYPES[analysis.document_type] || "Tài liệu sức khỏe") + '</span><span>' + esc(analysis.document_date ? date(analysis.document_date, false) : "Không rõ ngày") + '</span><span>' + esc(analysis.provider || "Không rõ cơ sở") + '</span></div><h3>' + esc(analysis.title) + '</h3><p>' + esc(analysis.summary) + "</p></div>" + metricRows + list("Thông tin bệnh được ghi", analysis.conditions) + medications + list("Đề xuất được ghi trên tài liệu", analysis.recommendations) + list("Điểm cần kiểm tra lại", analysis.warnings, "warning") + '<p class="analysis-disclaimer">' + esc(analysis.disclaimer) + "</p>";
 }
 
 function renderMedicalRecords() {
   if (!state.medicalRecords.length) {
-    $("#medical-record-list").innerHTML = '<article class="card empty-records">' + icon("document") + '<h2>Chưa có tài liệu nào</h2><p>Thêm ảnh hồ sơ đầu tiên. Bạn luôn được xem lại trước khi lưu.</p><button class="btn outline" data-open-upload>Phân tích ảnh hồ sơ</button></article>';
+    $("#medical-record-list").innerHTML = '<article class="panel empty-state"><h2>Chưa có giấy tờ nào</h2><p class="note">Giấy tờ đã lưu sẽ hiện ở đây.</p></article>';
     return;
   }
   $("#medical-record-list").innerHTML = state.medicalRecords.map(record => {
     const a = record.analysis;
     const notable = (a.metrics || []).filter(metric => !["normal", "unknown"].includes(metric.flag)).length;
-    return '<article class="card medical-record"><div class="medical-record-top"><span class="record-icon">' + icon("document") + '</span><div><span class="eyebrow">' + esc(DOCUMENT_TYPES[a.document_type] || "TÀI LIỆU SỨC KHỎE") + '</span><h2>' + esc(a.title) + '</h2><p>' + esc(a.summary) + '</p></div><span class="record-date">' + esc(a.document_date ? date(a.document_date, false) : date(record.created_at, false)) + '</span></div><div class="record-highlights"><span>' + (a.metrics?.length || 0) + ' chỉ số</span><span>' + (a.medications?.length || 0) + ' thuốc</span>' + (notable ? '<span class="attention-text">' + notable + ' mục cần xem lại</span>' : '<span class="safe-text">Đã ghi nhận</span>') + '</div><details class="record-details"><summary>Xem nội dung đã lưu</summary>' + analysisMarkup(a) + '</details><button class="delete-record" data-delete-record="' + esc(record.id) + '">' + icon("trash") + "Xóa bản ghi</button></article>";
+    return '<article class="panel medical-record"><div class="record-meta"><span>' + esc(DOCUMENT_TYPES[a.document_type] || "Tài liệu sức khỏe") + "</span><span>" + esc(a.document_date ? date(a.document_date, false) : date(record.created_at, false)) + "</span>" + (notable ? '<span class="tag attention">' + notable + " mục cần xem lại</span>" : "") + "</div><h2>" + esc(a.title) + "</h2><p>" + esc(a.summary) + '</p><details class="record-details"><summary>Xem nội dung đã lưu</summary>' + analysisMarkup(a) + '</details><div class="record-actions"><button class="delete-record" data-delete-record="' + esc(record.id) + '">Xóa</button></div></article>';
   }).join("");
 }
 
@@ -330,7 +346,7 @@ async function refreshMedicalRecords() {
     renderMedicalRecords();
   } catch (error) {
     if (epoch !== state.authEpoch) return;
-    $("#medical-record-list").innerHTML = '<article class="card empty-records"><h2>Chưa tải được hồ sơ sức khỏe</h2><p>' + esc(error.message) + "</p></article>";
+    $("#medical-record-list").innerHTML = '<article class="panel empty-state"><h2>Chưa tải được danh sách giấy tờ</h2><p>' + esc(error.message) + "</p></article>";
   }
 }
 
@@ -341,7 +357,7 @@ function resetMedicalUpload() {
   $("#medical-document-file").value = "";
   $("#document-ai-consent").checked = false;
   $("#confirm-medical-record").checked = false;
-  $("#document-preview").src = "";
+  $("#document-preview").removeAttribute("src");
   $("#document-preview").classList.add("hidden");
   $(".document-drop").classList.remove("has-file");
   $("#upload-stage").classList.remove("hidden");
@@ -359,7 +375,6 @@ function updateDocumentButton() {
 
 function openMedicalUpload() {
   resetMedicalUpload();
-  if (!state.documentAiEnabled) errorAt("#document-error", "Trợ lý AI chưa được quản trị viên kích hoạt. Bạn vẫn có thể ghi chỉ số và theo dõi sức khỏe bình thường.");
   $("#medical-upload-dialog").showModal();
 }
 
@@ -393,7 +408,7 @@ async function analyzeMedicalDocument() {
   const button = $("#analyze-document");
   const original = button.innerHTML;
   button.disabled = true;
-  button.textContent = "AI đang đọc tài liệu…";
+  button.textContent = "Đang đọc ảnh…";
   errorAt("#document-error");
   const body = new FormData();
   body.append("file", file);
@@ -403,7 +418,7 @@ async function analyzeMedicalDocument() {
     const result = await api.analyzeMedicalRecord(body);
     if (epoch !== state.authEpoch) return;
     state.pendingMedical = result;
-    $("#document-analysis-preview").innerHTML = analysisMarkup(result.analysis) + '<p class="privacy-result">' + icon("shield") + esc(result.privacy_note) + "</p>";
+    $("#document-analysis-preview").innerHTML = analysisMarkup(result.analysis) + '<p class="privacy-result">' + esc(result.privacy_note) + "</p>";
     $("#upload-stage").classList.add("hidden");
     $("#review-stage").classList.remove("hidden");
   } catch (error) { errorAt("#document-error", error.message); }
@@ -425,18 +440,18 @@ async function saveMedicalRecord() {
     $("#medical-upload-dialog").close();
     renderMedicalRecords();
     navigate("records");
-    toast("Đã ghi tài liệu vào hồ sơ sức khỏe của bạn.");
+    toast("Đã lưu giấy tờ.");
   } catch (error) { errorAt("#record-save-error", error.message); }
   finally { state.busy = false; button.innerHTML = original; button.disabled = !$("#confirm-medical-record").checked; }
 }
 
 async function deleteMedicalRecord(id) {
-  if (!window.confirm("Xóa bản ghi này khỏi hồ sơ sức khỏe? Hành động này không thể hoàn tác.")) return;
+  if (!window.confirm("Xóa giấy tờ này? Không thể khôi phục sau khi xóa.")) return;
   try {
     await api.deleteMedicalRecord(id);
     state.medicalRecords = state.medicalRecords.filter(record => record.id !== id);
     renderMedicalRecords();
-    toast("Đã xóa bản ghi khỏi hồ sơ sức khỏe.");
+    toast("Đã xóa giấy tờ.");
   } catch (error) { toast(error.message, "error"); }
 }
 
@@ -468,9 +483,8 @@ function stopStreams() {
   $("#device-values").classList.add("hidden"); $("#device-values").innerHTML = "";
   $("#save-device").disabled = true;
   $("#disconnect-device").classList.add("hidden");
-  $("#device-name").textContent = "Kết nối với máy đo của bạn";
-  $("#device-message").textContent = "Bật Bluetooth, đặt thiết bị ở gần và chọn kết nối.";
-  $("#simulate-ble").textContent = "Thử với dữ liệu mẫu";
+  $("#device-name").textContent = "Kết nối máy đo qua Bluetooth";
+  $("#device-message").textContent = "Bật Bluetooth trên máy đo, đặt gần điện thoại rồi bấm Kết nối.";
 }
 function renderDevice() {
   const v = freshValues();
@@ -479,9 +493,9 @@ function renderDevice() {
   $("#device-values").classList.toggle("hidden", !hasData);
   $("#device-values").innerHTML = METRICS.map(m => {
     const [severity, text] = statusOf(m.key, v);
-    return "<div><span>" + m.label + "</span><strong>" + valueOf(m.key, v) + " " + m.unit + '</strong> <span class="badge ' + severity + '">' + text + "</span></div>";
+    return "<div><span>" + m.label + "</span><strong>" + valueOf(m.key, v) + " " + m.unit + '</strong> <span class="tag ' + severity + '">' + text + "</span></div>";
   }).join("");
-  if (!hasData && state.deviceSource) $("#device-message").textContent = "Đang chờ chỉ số mới từ thiết bị. Những chỉ số quá 30 giây sẽ không được lưu.";
+  if (!hasData && state.deviceSource) $("#device-message").textContent = "Đang chờ chỉ số từ máy đo. Chỉ số cũ hơn 30 giây sẽ không được lưu.";
 }
 function ingest(detail, epoch) {
   if (epoch !== state.deviceEpoch || !state.user) return;
@@ -502,13 +516,13 @@ async function connectBle() {
   ble.addEventListener("connected", event => {
     if (epoch !== state.deviceEpoch) return;
     $("#device-name").textContent = event.detail.name;
-    $("#device-message").textContent = "Đã kết nối. Hãy bắt đầu đo trên thiết bị của bạn.";
+    $("#device-message").textContent = "Đã kết nối. Hãy bắt đầu đo trên máy.";
     $("#disconnect-device").classList.remove("hidden");
   });
   ble.addEventListener("disconnected", () => {
     if (epoch !== state.deviceEpoch) return;
     stopStreams();
-    $("#device-message").textContent = "Thiết bị đã ngắt kết nối. Kết nối lại để ghi chỉ số mới.";
+    $("#device-message").textContent = "Máy đo đã ngắt kết nối. Bấm Kết nối để thử lại.";
   });
   ble.addEventListener("error", () => { if (epoch === state.deviceEpoch) errorAt("#measurement-error", "Chưa đọc được chỉ số. Hãy thử đo lại."); });
   $("#connect-ble").disabled = true;
@@ -519,7 +533,7 @@ async function connectBle() {
   } catch (error) {
     if (epoch !== state.deviceEpoch) return;
     stopStreams();
-    errorAt("#measurement-error", error.name === "NotFoundError" ? "Bạn chưa chọn thiết bị. Có thể thử lại hoặc nhập chỉ số từ máy đo." : error.message);
+    errorAt("#measurement-error", error.name === "NotFoundError" ? "Chưa chọn máy đo. Hãy thử lại hoặc dùng Nhập tay." : error.message);
   } finally { $("#connect-ble").disabled = false; }
 }
 function startSimulation() {
@@ -529,8 +543,8 @@ function startSimulation() {
   simulator = new VitalSimulator(5);
   simulator.addEventListener("data", event => ingest(event.detail, epoch));
   simulator.start();
-  $("#device-name").textContent = "Bạn đang xem dữ liệu mẫu";
-  $("#device-message").textContent = "Các chỉ số tự thay đổi để bạn trải nghiệm cách theo dõi.";
+  $("#device-name").textContent = "Dữ liệu mẫu";
+  $("#device-message").textContent = "Chỉ số được tạo tự động để dùng thử, không phải số đo thật. Lần đo mẫu không thay đổi tình trạng trên trang Hôm nay.";
   $("#disconnect-device").classList.remove("hidden");
   freshnessTimer = setInterval(renderDevice, 3000);
 }
@@ -543,18 +557,20 @@ async function saveMeasurement(values, source, samples = []) {
   const epoch = state.authEpoch;
   const button = source === "manual" ? $('#measurement-form button[type="submit"]') : $("#save-device");
   const original = button.innerHTML;
-  button.disabled = true; button.textContent = "Đang lưu và xem xét chỉ số…";
+  button.disabled = true; button.textContent = "Đang lưu…";
   errorAt("#measurement-error");
   try {
     const r = await api.assess({ vitals: { ...values, timestamp: new Date().toISOString() }, source, samples });
     if (epoch !== state.authEpoch) return;
-    state.result = r;
-    state.records = [{ id: r.id, created_at: r.created_at, risk_level: r.risk_level, overall_score: r.scores.overall, vitals: { ...values, source } }, ...state.records].slice(0, 30);
+    const record = { id: r.id, created_at: r.created_at, risk_level: r.risk_level, overall_score: r.scores.overall, vitals: { ...values, source } };
+    state.records = [record, ...state.records].slice(0, 30);
+    // Simulated data never replaces a real reading as the current status.
+    if (isReal(record) || !state.records.some(isReal)) state.result = r;
     $("#measurement-dialog").close();
     $("#measurement-form").reset();
     stopStreams();
     renderDashboard(); renderHistory(); navigate("dashboard");
-    toast(source === "simulation" ? "Đã lưu lần trải nghiệm với dữ liệu mẫu." : "Đã lưu chỉ số vào nhật ký của bạn.");
+    toast(state.result?.id !== r.id ? "Đã lưu lần đo mẫu vào Lịch sử đo. Tình trạng hôm nay vẫn theo số đo thật." : "Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
   finally { state.busy = false; button.disabled = false; button.innerHTML = original; if (source !== "manual") renderDevice(); }
 }
@@ -610,10 +626,12 @@ async function boot() {
     state.documentAiEnabled = Boolean(config.document_ai_enabled);
     state.aiProvider = config.ai_provider || "AI";
     $("#document-ai-provider").textContent = state.aiProvider;
+    $("#upload-record").disabled = !state.documentAiEnabled;
+    $("#records-ai-off").classList.toggle("hidden", state.documentAiEnabled);
     $("#google-login").disabled = !config.google_enabled;
     $("#demo-entry").classList.toggle("hidden", !config.demo_enabled);
     const loginError = new URLSearchParams(location.search).get("auth_error");
-    errorAt("#login-message", loginError ? "Chưa đăng nhập được với Google. Hãy thử lại hoặc chọn tài khoản khác." : !config.google_enabled ? "Đăng nhập Google đang chờ quản trị viên hoàn tất cấu hình OAuth. Bạn có thể dùng hồ sơ thử ngay bây giờ." : "");
+    errorAt("#login-message", loginError ? "Chưa đăng nhập được với Google. Hãy thử lại hoặc chọn tài khoản khác." : !config.google_enabled ? "Đăng nhập bằng Google chưa được bật trên máy chủ này." : "");
     if (loginError) window.history.replaceState(null, "", "/");
     let user;
     try { user = await api.me(); } catch (error) { if (error.status !== 401) throw error; }
@@ -659,12 +677,9 @@ function bindEvents() {
     if (event.target.closest("[data-open-measurement]")) openMeasurement();
     if (event.target.closest("#history-add")) openMeasurement();
     if (event.target.closest("#retry-history")) refreshRecords();
-    if (event.target.closest("#edit-preferences")) editProfile();
-    if (event.target.closest("#profile-logout")) signOut();
   });
   $("#edit-profile").addEventListener("click", editProfile);
-  ["new-measurement", "measure-from-summary"].forEach(id => $("#" + id).addEventListener("click", () => openMeasurement()));
-  $("#home-connect-device").addEventListener("click", () => openMeasurement("device"));
+  $("#new-measurement").addEventListener("click", () => openMeasurement());
   $("#upload-record").addEventListener("click", openMedicalUpload);
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
   $("#document-ai-consent").addEventListener("change", updateDocumentButton);
@@ -683,7 +698,7 @@ function bindEvents() {
   $("#chart-metric").addEventListener("change", renderChart);
   $("#refresh-history").addEventListener("click", refreshRecords);
   $("#history-filter").addEventListener("change", renderHistory);
-  $("#rating-buttons").innerHTML = [1, 2, 3, 4, 5].map(n => '<button type="button" data-rating="' + n + '" aria-label="' + n + ' sao" aria-pressed="false">★</button>').join("");
+  $("#rating-buttons").innerHTML = [1, 2, 3, 4, 5].map(n => '<button type="button" data-rating="' + n + '" aria-pressed="false">' + n + "</button>").join("");
   $("#rating-buttons").addEventListener("click", event => {
     const button = event.target.closest("[data-rating]");
     if (!button) return;
@@ -692,7 +707,7 @@ function bindEvents() {
   });
   $("#feedback-form").addEventListener("submit", async event => {
     event.preventDefault();
-    if (!state.rating) { toast("Hãy chọn số sao trước khi gửi góp ý.", "error"); return; }
+    if (!state.rating) { toast("Hãy chọn mức độ hài lòng từ 1 đến 5.", "error"); return; }
     const button = event.currentTarget.querySelector('button[type="submit"]');
     button.disabled = true;
     const epoch = state.authEpoch;
@@ -701,7 +716,7 @@ function bindEvents() {
       if (epoch !== state.authEpoch) return;
       $("#feedback-form").reset(); state.rating = 0;
       $$("[data-rating]").forEach(el => { el.classList.remove("active"); el.setAttribute("aria-pressed", "false"); });
-      toast("Cảm ơn bạn. Góp ý đã được ghi nhận.");
+      toast("Đã gửi góp ý. Xin cảm ơn.");
     } catch (error) { toast(error.message, "error"); }
     finally { button.disabled = false; }
   });

@@ -43,8 +43,8 @@ export class VitalChart {
     ctx.fillStyle = "rgba(21, 139, 104, 0.07)";
     ctx.fillRect(padding.left, y(bounds.healthy[1]), width, y(bounds.healthy[0]) - y(bounds.healthy[1]));
 
-    ctx.font = "12px Manrope, sans-serif";
-    ctx.fillStyle = "#8b99aa";
+    ctx.font = "14px \"Be Vietnam Pro\", sans-serif";
+    ctx.fillStyle = "#3f4b5b";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     for (let index = 0; index <= 4; index += 1) {
@@ -83,7 +83,7 @@ export class VitalChart {
     ctx.fill();
 
     ctx.beginPath();
-    ctx.strokeStyle = "#0b6bcb";
+    ctx.strokeStyle = "#0b57a4";
     ctx.lineWidth = 2.25;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -92,13 +92,13 @@ export class VitalChart {
     const last = points.at(-1);
     ctx.beginPath();
     ctx.fillStyle = "white";
-    ctx.strokeStyle = "#0b6bcb";
+    ctx.strokeStyle = "#0b57a4";
     ctx.lineWidth = 2.5;
     ctx.arc(last.x, last.y, 4.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = "#8b99aa";
+    ctx.fillStyle = "#3f4b5b";
     ctx.textAlign = "left";
     ctx.textBaseline = "bottom";
     ctx.fillText("Cũ hơn", padding.left, rect.height - 4);

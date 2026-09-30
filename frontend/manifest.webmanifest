@@ -4,8 +4,8 @@
   "description": "Theo dõi sinh hiệu và sàng lọc nguy cơ sức khỏe theo ba tầng.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f3f7fb",
-  "theme_color": "#0b6bcb",
+  "background_color": "#f3f5f8",
+  "theme_color": "#0d2c54",
   "lang": "vi",
   "icons": [
     { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
