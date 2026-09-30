@@ -31,6 +31,7 @@ export const api = {
   assess: body => request("/api/assessments", { method: "POST", body: JSON.stringify(body) }),
   history: (limit = 30) => request(`/api/assessments?limit=${limit}`),
   assessment: id => request(`/api/assessments/${encodeURIComponent(id)}`),
+  deleteAssessment: id => request(`/api/assessments/${encodeURIComponent(id)}`, { method: "DELETE" }),
   feedback: body => request("/api/feedback", { method: "POST", body: JSON.stringify(body) }),
   analyzeMedicalRecord: body => request("/api/medical-records/analyze", { method: "POST", body, timeout: 65000 }),
   saveMedicalRecord: body => request("/api/medical-records", { method: "POST", body: JSON.stringify(body) }),

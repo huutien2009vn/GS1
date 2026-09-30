@@ -101,6 +101,20 @@ def test_account_isolation_including_feedback_and_revoked_cookie(client):
     assert client.get("/api/auth/me").status_code == 401
 
 
+def test_assessment_delete_is_account_scoped(client):
+    login(client)
+    client.put("/api/profile", json=PROFILE)
+    record_id = client.post("/api/assessments", json=MEASUREMENT).json()["id"]
+    client.post("/api/auth/logout")
+    login(client)
+    client.put("/api/profile", json=PROFILE)
+    assert client.delete("/api/assessments/" + record_id).status_code == 404
+    own_id = client.post("/api/assessments", json=MEASUREMENT).json()["id"]
+    assert client.delete("/api/assessments/" + own_id).status_code == 204
+    assert client.get("/api/assessments").json() == []
+    assert client.get("/api/assessments/" + own_id).status_code == 404
+
+
 def test_cross_origin_writes_and_missing_custom_header_rejected(client):
     assert client.post("/api/auth/demo", headers={"Origin": "https://untrusted.example"}).status_code == 403
     assert client.post("/api/auth/demo", headers={"X-Requested-With": ""}).status_code == 403

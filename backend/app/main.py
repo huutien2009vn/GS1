@@ -135,6 +135,17 @@ async def get_assessment(assessment_id: str, user: User = Depends(current_user),
     return AssessmentResult.model_validate(record.result | {"id": record.id})
 
 
+@app.delete("/api/assessments/{assessment_id}", status_code=204)
+async def delete_assessment(assessment_id: str, user: User = Depends(current_user),
+                            session: AsyncSession = Depends(get_session)):
+    record = await session.scalar(select(Assessment).where(Assessment.id == assessment_id, Assessment.user_id == user.id))
+    if not record:
+        raise HTTPException(404, "Không tìm thấy lần theo dõi này.")
+    await session.delete(record)
+    await session.commit()
+    return Response(status_code=204)
+
+
 @app.post("/api/feedback", response_model=FeedbackResult, status_code=201)
 async def create_feedback(payload: FeedbackCreate, user: User = Depends(current_user),
                           session: AsyncSession = Depends(get_session)):

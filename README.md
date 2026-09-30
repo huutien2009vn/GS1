@@ -187,6 +187,7 @@ Model khả dụng phụ thuộc tài khoản Google AI Studio. Nếu Google tha
 | `POST` | `/api/assessments` | Tính và lưu kết quả của tài khoản |
 | `GET` | `/api/assessments` | Lịch sử của tài khoản |
 | `GET` | `/api/assessments/{id}` | Chi tiết thuộc tài khoản |
+| `DELETE` | `/api/assessments/{id}` | Xóa lần đo thuộc tài khoản |
 | `POST` | `/api/feedback` | Lưu phản hồi thuộc tài khoản |
 | `POST` | `/api/medical-records/analyze` | Phân tích ảnh trong bộ nhớ, chưa lưu |
 | `GET/POST` | `/api/medical-records` | Xem hoặc lưu JSON đã xác nhận |

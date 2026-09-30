@@ -23,7 +23,7 @@ const METRICS = [
   { key: "glucose", label: "Đường huyết", unit: "mg/dL" },
 ];
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
-const LEVELS = { safe: "Không có cảnh báo", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm" };
+const LEVELS = { safe: "Trong ngưỡng an toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm" };
 const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Đo lại vào lần sau và ghi chép đều đặn.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
 const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu" };
 const isEmergency = result => Boolean(result?.alerts?.some(a => a.severity === "alert"));
@@ -57,8 +57,9 @@ function screen(name) {
   if (name !== "app") document.title = "GeneSense - Theo dõi sức khỏe";
   window.scrollTo(0, 0);
 }
+const toDate = value => new Date(value?.endsWith?.("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z");
 function date(value, time = true) {
-  const parsed = new Date(value?.endsWith?.("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z");
+  const parsed = toDate(value);
   if (Number.isNaN(parsed.getTime())) return "-";
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", ...(time ? { hour: "2-digit", minute: "2-digit" } : {}) }).format(parsed);
 }
@@ -238,7 +239,12 @@ function renderDashboard() {
   status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
   $("#risk-summary").textContent = r ? (level === "emergency" ? SUMMARY_FALLBACK.emergency : r.insight.summary || SUMMARY_FALLBACK[level]) : "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên.";
   $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() + (r.measurement_source === "simulation" ? " (không phải dữ liệu thật)" : "") : "";
-  $("#score-details").classList.toggle("hidden", !r);
+  // While the emergency panel is up it is the only call to action; the score would read as reassurance.
+  $("#score-details").classList.toggle("hidden", !r || level === "emergency");
+  $("#new-measurement").classList.toggle("hidden", level === "emergency");
+  const recent = level === "emergency" ? null : recentEmergency();
+  $("#recent-emergency").classList.toggle("hidden", !recent);
+  if (recent) $("#recent-emergency").textContent = "Lần đo lúc " + date(recent.created_at) + " ở mức nguy hiểm. Hãy tiếp tục đo và liên hệ bác sĩ nếu chỉ số lại tăng cao.";
   $("#result-alerts").innerHTML = r && level !== "emergency" ? alertsMarkup(r) : "";
   if (r) {
     $("#risk-score").textContent = Math.round(r.scores.overall);
@@ -276,6 +282,10 @@ async function refreshRecords() {
     $("#history-list").innerHTML = '<div class="empty-state"><h3>Chưa tải được lịch sử</h3><p>' + esc(error.message) + '</p><button class="btn outline" id="retry-history">Thử lại</button></div>';
   }
 }
+function recentEmergency() {
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  return state.records.find(row => isReal(row) && recordLevel(row) === "emergency" && toDate(row.created_at).getTime() >= since) || null;
+}
 function recordLevel(record) {
   const v = record.vitals || {};
   return METRICS.some(m => statusOf(m.key, v)[0] === "alert") ? "emergency" : record.risk_level;
@@ -293,6 +303,16 @@ function renderHistory() {
     return "<tr><td>" + esc(date(record.created_at)) + '<span class="source">' + esc(SOURCE_NAMES[record.vitals.source || "manual"]) + "</span></td><td>" + esc(readings) + '</td><td><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + '</span></td><td><button class="link-button" data-record="' + esc(record.id) + '">Xem chi tiết</button></td></tr>';
   }).join("") + "</tbody></table>";
 }
+async function deleteAssessment(id) {
+  if (!id || !window.confirm("Xóa lần đo này? Không thể khôi phục sau khi xóa.")) return;
+  try {
+    await api.deleteAssessment(id);
+    $("#result-dialog").close();
+    await refreshRecords();
+    if (state.view === "history") requestAnimationFrame(renderChart);
+    toast("Đã xóa lần đo.");
+  } catch (error) { toast(error.message, "error"); }
+}
 async function showResult(id) {
   const epoch = state.authEpoch;
   try {
@@ -300,6 +320,7 @@ async function showResult(id) {
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
     $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p style="margin-top:16px"><a class="btn primary" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p style="margin-top:16px">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : valueOf(m.key, r.measured_vitals) + " " + m.unit) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
+    $("#delete-assessment").dataset.id = r.id;
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
 }
@@ -570,7 +591,8 @@ async function saveMeasurement(values, source, samples = []) {
     $("#measurement-form").reset();
     stopStreams();
     renderDashboard(); renderHistory(); navigate("dashboard");
-    toast(state.result?.id !== r.id ? "Đã lưu lần đo mẫu vào Lịch sử đo. Tình trạng hôm nay vẫn theo số đo thật." : "Đã lưu chỉ số.");
+    if (state.result?.id !== r.id) toast("Đã lưu lần đo mẫu vào Lịch sử đo. Tình trạng hôm nay vẫn theo số đo của bạn.");
+    else if (!isEmergency(r)) toast("Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
   finally { state.busy = false; button.disabled = false; button.innerHTML = original; if (source !== "manual") renderDevice(); }
 }
@@ -631,7 +653,7 @@ async function boot() {
     $("#google-login").disabled = !config.google_enabled;
     $("#demo-entry").classList.toggle("hidden", !config.demo_enabled);
     const loginError = new URLSearchParams(location.search).get("auth_error");
-    errorAt("#login-message", loginError ? "Chưa đăng nhập được với Google. Hãy thử lại hoặc chọn tài khoản khác." : !config.google_enabled ? "Đăng nhập bằng Google chưa được bật trên máy chủ này." : "");
+    errorAt("#login-message", loginError ? "Chưa đăng nhập được với Google. Hãy thử lại hoặc chọn tài khoản khác." : !config.google_enabled ? "Đăng nhập bằng Google sẽ có trong bản chính thức." : "");
     if (loginError) window.history.replaceState(null, "", "/");
     let user;
     try { user = await api.me(); } catch (error) { if (error.status !== 401) throw error; }
@@ -679,6 +701,7 @@ function bindEvents() {
     if (event.target.closest("#retry-history")) refreshRecords();
   });
   $("#edit-profile").addEventListener("click", editProfile);
+  $("#delete-assessment").addEventListener("click", event => deleteAssessment(event.currentTarget.dataset.id));
   $("#new-measurement").addEventListener("click", () => openMeasurement());
   $("#upload-record").addEventListener("click", openMedicalUpload);
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
