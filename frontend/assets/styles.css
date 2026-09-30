@@ -166,6 +166,13 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .reading-value small { font-size: .889rem; font-weight: 400; margin-left: 4px; }
 .reading-value.empty { color: var(--ink-2); font-weight: 400; font-size: 1rem; }
 .reading-flag { grid-column: 1 / -1; font-size: .889rem; font-weight: 600; }
+/* Range bar: where the value sits against the reference zones. The value and flag text carry the meaning. */
+.range { grid-column: 1 / -1; position: relative; height: 12px; margin-top: 6px; }
+.range-zone { position: absolute; top: 3px; height: 6px; padding: 0 1px; background-clip: content-box; border-radius: 3px; }
+.range-zone.safe { background-color: #b5d9c2; }
+.range-zone.attention { background-color: #efd083; }
+.range-zone.alert { background-color: #eaa9a4; }
+.range-mark { position: absolute; top: -3px; width: 4px; height: 18px; margin-left: -2px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 0 2px #fff; }
 .flag-attention { color: var(--amber); }
 .flag-alert { color: var(--red); }
 
@@ -176,9 +183,30 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .tag.alert { background: var(--red-bg); color: var(--red); }
 
 /* History */
-.chart-wrap { position: relative; height: 280px; }
-.chart-wrap canvas { width: 100%; height: 100%; display: block; }
-.chart-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; max-width: none; color: var(--ink-2); background: #fff; }
+.trend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.trend-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; }
+.trend-head h3 { margin: 0; }
+.trend-head small { font-weight: 400; }
+.trend-latest { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trend-legend { display: flex; flex-wrap: wrap; gap: 4px 20px; list-style: none; padding: 0; margin: 0 0 8px; font-size: .889rem; color: var(--ink-2); }
+.trend-legend span { display: inline-block; width: 18px; height: 3px; margin-right: 8px; border-radius: 2px; vertical-align: middle; }
+.key-sys { background: #0b57a4; }
+.key-dia { background: #5fa8e8; }
+.trend-chart { position: relative; height: 200px; border-radius: 4px; }
+.trend-empty { margin: 8px 0 0; }
+.chart-svg { display: block; overflow: visible; }
+.chart-band { fill: #17663a; fill-opacity: .08; }
+.chart-grid { stroke: #e3e7ed; stroke-width: 1; }
+.chart-axis { fill: var(--ink-2); font-size: 16px; font-variant-numeric: tabular-nums; }
+.chart-value { fill: var(--ink); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-cross { stroke: var(--line-strong); stroke-width: 1; }
+.chart-threshold { stroke-width: 1.5; stroke-dasharray: 5 4; }
+.trend-legend .key-limit { height: 0; border-top: 2px dashed var(--ink-2); background: none; }
+.chart-tip { position: absolute; top: 0; z-index: 2; pointer-events: none; white-space: nowrap; padding: 8px 12px; font-size: .889rem; background: #fff; border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: 0 4px 12px #0d2c541f; }
+.chart-tip-date { color: var(--ink-2); }
+.chart-tip-row { display: flex; align-items: center; gap: 8px; }
+.chart-tip-key { width: 14px; height: 3px; border-radius: 2px; }
+.chart-tip-row strong { font-variant-numeric: tabular-nums; }
 .history-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .history-table th { text-align: left; font-size: .889rem; font-weight: 600; color: var(--ink-2); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line-strong); }
 .history-table td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -212,13 +240,39 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 
 /* Profile */
-.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
-.profile-grid .full { grid-column: 1 / -1; }
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 24px; margin: 0; }
-.facts dt { color: var(--ink-2); }
-.facts dd { margin: 0; font-weight: 600; }
-.profile-grid h3 { margin-top: 20px; }
-.profile-grid p { margin-bottom: 0; }
+.facts-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; margin: 8px 0 0; }
+.facts-2col > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.facts-2col dt { color: var(--ink-2); }
+.facts-2col dd { margin: 0; font-weight: 600; text-align: right; }
+.fact-note { font-weight: 400; color: var(--ink-2); }
+#profile-view h3 { margin-top: 20px; }
+
+/* Family tree: three generations on a 4-column grid; joins draw the parent-child lines. */
+.ft-summary p { margin-bottom: 4px; }
+.family-tree { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 12px; margin: 20px 0 16px;
+  grid-template-areas: "sp sp sm sm" "pgf pgm mgf mgm" "jp jp jm jm" "fa fa mo mo" "jc jc jc jc" ". ch ch ."; }
+.ft-side { padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--line); font-size: .889rem; font-weight: 600; color: var(--ink-2); text-align: center; }
+.ft-side-p { grid-area: sp; } .ft-side-m { grid-area: sm; }
+.ft-pgf { grid-area: pgf; } .ft-pgm { grid-area: pgm; } .ft-mgf { grid-area: mgf; } .ft-mgm { grid-area: mgm; }
+.ft-father { grid-area: fa; } .ft-mother { grid-area: mo; }
+.ft-father, .ft-mother { justify-self: center; width: calc(50% - 6px); }
+.ft-join-p { grid-area: jp; } .ft-join-m { grid-area: jm; } .ft-join-c { grid-area: jc; }
+.ft-children { grid-area: ch; position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 22px; }
+.ft-children::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 22px; border: 2px solid var(--line-strong); border-bottom: 0; }
+.ft-join { position: relative; height: 30px; }
+.ft-join::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 50%; border: 2px solid var(--line-strong); border-top: 0; }
+.ft-join::after { content: ""; position: absolute; top: 50%; bottom: 0; left: calc(50% - 1px); border-left: 2px solid var(--line-strong); }
+.ft-node { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 76px; padding: 10px 12px; border: 2px solid var(--line-strong); border-radius: var(--radius); background: #fff; text-align: center; }
+.ft-rel { font-weight: 600; }
+.ft-state { font-size: .889rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.ft-node.known { border-color: #c98a00; background: var(--amber-bg); }
+.ft-node.known .ft-state { color: var(--amber); font-weight: 600; }
+.ft-node.unknown { border-style: dashed; background: var(--bg); }
+.ft-node.you { outline: 2px solid var(--blue); outline-offset: 2px; }
+.ft-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; list-style: none; padding: 0; margin: 0; font-size: .889rem; color: var(--ink-2); }
+.ft-key { display: inline-block; width: 22px; height: 14px; margin-right: 8px; border: 2px solid var(--line-strong); border-radius: 3px; vertical-align: middle; background: #fff; }
+.ft-key.known { border-color: #c98a00; background: var(--amber-bg); }
+.ft-key.unknown { border-style: dashed; background: var(--bg); }
 .rating > div { display: flex; gap: 8px; }
 .rating button { width: 52px; height: 52px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #fff; font-weight: 600; }
 .rating button.active { background: var(--blue); border-color: var(--blue); color: #fff; }
@@ -317,7 +371,12 @@ details[open]::details-content { block-size: auto; }
   .status-panel { padding: 24px 16px; }
   .status-panel .btn.primary { width: 100%; }
   .reading-list { padding: 0 16px; }
-  .field-grid, .profile-grid { grid-template-columns: 1fr; }
+  .field-grid, .trend-grid, .facts-2col { grid-template-columns: 1fr; }
+  .family-tree { grid-template-columns: 1fr 1fr; row-gap: 8px; grid-template-areas: "sp sm" "pgf mgf" "pgm mgm" "fa mo" "jc jc" "ch ch"; }
+  .ft-side { margin-bottom: 0; }
+  .ft-join-p, .ft-join-m { display: none; }
+  .ft-join-c { margin-top: -8px; }
+  .ft-father, .ft-mother { margin-top: 8px; width: auto; justify-self: stretch; }
   .score-list { grid-template-columns: 1fr; }
   .panel-heading { flex-direction: column; }
   .inline-select { width: 100%; }

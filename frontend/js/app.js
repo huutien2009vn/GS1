@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { HealthBleClient, VitalSimulator } from "./ble.js";
-import { VitalChart } from "./chart.js";
+import { TrendChart } from "./chart.js";
 import { hydrateIcons } from "./icons.js";
 
 const $ = selector => document.querySelector(selector);
@@ -26,6 +26,19 @@ const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
 const LEVELS = { safe: "Trong ngưỡng an toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm" };
 const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Đo lại vào lần sau và ghi chép đều đặn.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
 const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu" };
+const ZONES = {
+  systolic: { min: 80, max: 200, zones: [[80, 140, "safe"], [140, 180, "attention"], [180, 200, "alert"]] },
+  heart_rate: { min: 30, max: 170, zones: [[30, 40, "alert"], [40, 50, "attention"], [50, 110, "safe"], [110, 150, "attention"], [150, 170, "alert"]] },
+  spo2: { min: 85, max: 100, zones: [[85, 90, "alert"], [90, 95, "attention"], [95, 100, "safe"]] },
+  glucose: { min: 40, max: 320, zones: [[40, 54, "alert"], [54, 70, "attention"], [70, 180, "safe"], [180, 300, "attention"], [300, 320, "alert"]] },
+};
+const TRENDS = {
+  bp: { unit: "mmHg", band: null, thresholds: [{ value: 140, color: "#0b57a4", label: "Ngưỡng cao tâm thu 140" }, { value: 90, color: "#5fa8e8", label: "Ngưỡng cao tâm trương 90" }], min: 60, max: 160, series: [["systolic", "Tâm thu", "#0b57a4"], ["diastolic", "Tâm trương", "#5fa8e8"]] },
+  heart_rate: { unit: "lần/phút", band: [50, 110], min: 45, max: 120, series: [["heart_rate", "Nhịp tim", "#0b57a4"]] },
+  spo2: { unit: "%", band: [95, 100], min: 88, max: 100, series: [["spo2", "SpO₂", "#0b57a4"]] },
+  glucose: { unit: "mg/dL", band: [70, 180], min: 50, max: 220, series: [["glucose", "Đường huyết", "#0b57a4"]] },
+};
+const trendCharts = {};
 const isEmergency = result => Boolean(result?.alerts?.some(a => a.severity === "alert"));
 const levelOf = result => isEmergency(result) ? "emergency" : result.risk_level;
 const isReal = record => (record.vitals?.source || "manual") !== "simulation";
@@ -37,7 +50,6 @@ const state = { user: null, health: null, records: [], result: null, step: 0, ed
 let ble = null;
 let simulator = null;
 let freshnessTimer = null;
-const chart = new VitalChart($("#vital-chart"));
 const accountChannel = "BroadcastChannel" in window ? new BroadcastChannel("genesense-account") : null;
 
 function toast(text, type = "") {
@@ -110,7 +122,7 @@ function navigate(view) {
   window.history.replaceState(null, "", "#" + state.view);
   if (state.view === "profile") renderProfile();
   if (state.view === "records") renderMedicalRecords();
-  if (state.view === "history") { renderHistory(); renderTips(); requestAnimationFrame(renderChart); }
+  if (state.view === "history") { renderHistory(); renderTips(); renderTrends(); }
   window.scrollTo(0, 0);
 }
 
@@ -213,13 +225,18 @@ async function nextStep(event) {
   finally { button.disabled = false; button.innerHTML = original; }
 }
 
+function rangeBar(key, value) {
+  const scale = ZONES[key];
+  const pos = v => ((Math.min(scale.max, Math.max(scale.min, v)) - scale.min) / (scale.max - scale.min) * 100).toFixed(1);
+  return '<div class="range" aria-hidden="true">' + scale.zones.map(([from, to, level]) => '<span class="range-zone ' + level + '" style="left:' + pos(from) + "%;width:" + (pos(to) - pos(from)).toFixed(1) + '%"></span>').join("") + '<span class="range-mark" style="left:' + pos(value) + '%"></span></div>';
+}
 function renderMetrics() {
   const values = state.result?.measured_vitals || {};
   $("#metric-grid").innerHTML = METRICS.map(m => {
     const [level, status] = statusOf(m.key, values);
     const measured = values[m.key] != null;
     const flag = level === "attention" || level === "alert" ? '<span class="reading-flag flag-' + level + '">' + status + "</span>" : "";
-    return '<div class="reading"><span class="reading-name">' + m.label + "</span>" + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></span>" : '<span class="reading-value empty">Chưa đo</span>') + flag + "</div>";
+    return '<div class="reading"><span class="reading-name">' + m.label + "</span>" + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></span>" + rangeBar(m.key, values[m.key]) : '<span class="reading-value empty">Chưa đo</span>') + flag + "</div>";
   }).join("");
 }
 function renderTips() {
@@ -267,13 +284,26 @@ function renderDashboard() {
   $("#measurement-context").textContent = r ? (hiddenSims ? "Không tính dữ liệu mẫu" : "") : "";
   renderMetrics();
 }
-function renderChart() {
-  const key = $("#chart-metric").value;
+function renderTrends() {
   const source = state.result?.measurement_source;
-  const rows = state.records.filter(row => (row.vitals.source || "manual") === source && row.vitals[key] != null).slice(0, 30).reverse();
-  $("#chart-context").textContent = rows.length ? rows.length + " lần đo, " + (source === "simulation" ? "dữ liệu mẫu" : "dữ liệu của bạn") : "";
-  $("#chart-empty").classList.toggle("hidden", rows.length > 0);
-  chart.setData(key, rows.map(row => ({ value: row.vitals[key], timestamp: row.created_at })));
+  const rows = state.records.filter(row => (row.vitals.source || "manual") === source).slice(0, 30).reverse();
+  $("#chart-context").textContent = source ? (source === "simulation" ? "Dữ liệu mẫu" : "Số đo của bạn, tối đa 30 lần gần nhất") : "";
+  for (const [id, spec] of Object.entries(TRENDS)) {
+    const card = $('[data-trend="' + id + '"]');
+    const points = rows.filter(row => spec.series.every(([key]) => row.vitals[key] != null));
+    card.querySelector(".trend-empty").classList.toggle("hidden", points.length > 0);
+    const host = card.querySelector(".trend-chart");
+    host.classList.toggle("hidden", !points.length);
+    card.querySelector(".trend-legend")?.classList.toggle("hidden", !points.length);
+    const last = points.at(-1);
+    const latest = last ? spec.series.map(([key]) => Math.round(last.vitals[key] * 10) / 10).join("/") + " " + spec.unit : "";
+    card.querySelector(".trend-latest").textContent = last ? "Gần nhất: " + latest : "";
+    $("#trend-" + id + "-summary").textContent = last ? points.length + " lần đo. Gần nhất " + latest + " lúc " + date(last.created_at) + "." : "";
+    if (!points.length) continue;
+    trendCharts[id] ||= new TrendChart(host);
+    trendCharts[id].set({ unit: spec.unit, band: spec.band, thresholds: spec.thresholds, min: spec.min, max: spec.max, times: points.map(row => toDate(row.created_at)),
+      series: spec.series.map(([key, label, color]) => ({ label, color, values: points.map(row => row.vitals[key]) })) });
+  }
 }
 function pickCurrent(rows) {
   return rows.find(isReal) || rows[0] || null;
@@ -322,7 +352,7 @@ async function deleteAssessment(id) {
     await api.deleteAssessment(id);
     closeDialog($("#result-dialog"));
     await refreshRecords();
-    if (state.view === "history") requestAnimationFrame(renderChart);
+    if (state.view === "history") renderTrends();
     toast("Đã xóa lần đo.");
   } catch (error) { toast(error.message, "error"); }
 }
@@ -337,16 +367,60 @@ async function showResult(id) {
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
 }
+function bmiLabel(bmi) {
+  // Asian cut-offs (WHO Western Pacific), as used by Vietnamese health guidance.
+  return bmi < 18.5 ? "Thiếu cân" : bmi < 23 ? "Bình thường" : bmi < 25 ? "Thừa cân" : "Béo phì";
+}
+function familyNode(h, member, extraClass = "") {
+  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
+  const saved = h.family_history.find(row => row.member_id === member.id);
+  const known = saved?.knowledge === "known" && saved.conditions?.length;
+  const kind = known ? "known" : saved?.knowledge === "none" ? "none" : "unknown";
+  const text = known ? saved.conditions.map(conditionName).join(", ") : kind === "none" ? "Không có bệnh đã biết" : "Chưa rõ";
+  return '<div class="ft-node ' + kind + " " + extraClass + '"><span class="ft-rel">' + member.label + '</span><span class="ft-state">' + esc(text) + "</span></div>";
+}
+function familySummary(h) {
+  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
+  const known = h.family_history.filter(row => row.knowledge === "known" && row.conditions?.length);
+  const unknown = MEMBERS.length - h.family_history.filter(row => row.knowledge === "known" || row.knowledge === "none").length;
+  const tally = {};
+  known.forEach(row => row.conditions.forEach(key => { tally[key] = (tally[key] || 0) + 1; }));
+  const parts = [];
+  parts.push(known.length ? known.length + " người thân có bệnh đã biết: " + Object.entries(tally).map(([key, count]) => conditionName(key) + " (" + count + " người)").join(", ") + "." : "Chưa khai báo người thân nào có bệnh đã biết.");
+  if (unknown) parts.push(unknown + " người chưa rõ tiền sử. Hỏi thêm gia đình để hồ sơ đầy đủ hơn.");
+  return parts.map(text => "<p>" + esc(text) + "</p>").join("");
+}
 function renderProfile() {
   const h = state.health, p = h.profile;
   const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const conditions = p.known_conditions.map(conditionName).filter(Boolean);
-  const familySection = (side, title, notes) => '<article class="panel' + (side === "immediate" ? " full" : "") + '"><h2>' + title + '</h2><dl class="facts">' + MEMBERS.filter(m => m.side === side).map(m => {
-    const saved = h.family_history.find(row => row.member_id === m.id);
-    const text = saved?.knowledge === "none" ? "Không có bệnh đã biết" : saved?.conditions?.length ? saved.conditions.map(conditionName).join(", ") : "Chưa rõ";
-    return "<dt>" + m.label + "</dt><dd>" + esc(text) + "</dd>";
-  }).join("") + "</dl>" + (notes ? "<h3>Ghi chú</h3><p>" + esc(notes) + "</p>" : "") + "</article>";
-  $("#profile-content").innerHTML = '<div class="profile-grid"><article class="panel full"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.user.email || "Hồ sơ mẫu") + '</p><dl class="facts"><dt>Tuổi</dt><dd>' + p.age + "</dd><dt>Chiều cao</dt><dd>" + p.height_cm + " cm</dd><dt>Cân nặng</dt><dd>" + p.weight_kg + " kg</dd><dt>BMI</dt><dd>" + (p.weight_kg / (p.height_cm / 100) ** 2).toFixed(1) + "</dd><dt>Bệnh đã chẩn đoán</dt><dd>" + esc(conditions.join(", ") || "Không khai báo") + "</dd><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd><dt>Hút thuốc</dt><dd>" + (p.smoker ? "Có" : "Không") + "</dd><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" + familySection("immediate", "Bố, mẹ và anh chị em") + familySection("paternal", "Bên nội", h.paternal_notes) + familySection("maternal", "Bên ngoại", h.maternal_notes) + "</div>";
+  const bmi = p.weight_kg / (p.height_cm / 100) ** 2;
+  const member = id => MEMBERS.find(m => m.id === id);
+  const sex = { female: "Nữ", male: "Nam", other: "Khác / không khai báo" }[p.sex] || "Không khai báo";
+  const you = { id: "you", label: "Bạn" };
+  const youText = conditions.join(", ") || "Không khai báo bệnh";
+  const notes = [["Bên nội", h.paternal_notes], ["Bên ngoại", h.maternal_notes]].filter(([, text]) => text);
+  $("#profile-content").innerHTML =
+    '<article class="panel"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.user.email || "Hồ sơ mẫu") + '</p>' +
+    '<dl class="facts facts-2col">' +
+      "<div><dt>Tuổi</dt><dd>" + p.age + "</dd></div><div><dt>Giới tính</dt><dd>" + sex + "</dd></div>" +
+      "<div><dt>Chiều cao</dt><dd>" + p.height_cm + " cm</dd></div><div><dt>Cân nặng</dt><dd>" + p.weight_kg + " kg</dd></div>" +
+      "<div><dt>BMI</dt><dd>" + bmi.toFixed(1) + ' <span class="fact-note">' + bmiLabel(bmi) + "</span></dd></div><div><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd></div>" +
+      "<div><dt>Bệnh đã chẩn đoán</dt><dd>" + esc(conditions.join(", ") || "Không khai báo") + "</dd></div><div><dt>Hút thuốc</dt><dd>" + (p.smoker ? "Có" : "Không") + "</dd></div>" +
+      "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>" +
+    "</dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" +
+    '<article class="panel"><h2>Tiền sử bệnh trong gia đình</h2><div class="ft-summary">' + familySummary(h) + "</div>" +
+    '<div class="family-tree" role="img" aria-label="Sơ đồ gia đình ba thế hệ">' +
+      '<span class="ft-side ft-side-p">Bên nội</span><span class="ft-side ft-side-m">Bên ngoại</span>' +
+      familyNode(h, member("paternal-grandfather"), "ft-pgf") + familyNode(h, member("paternal-grandmother"), "ft-pgm") +
+      familyNode(h, member("maternal-grandfather"), "ft-mgf") + familyNode(h, member("maternal-grandmother"), "ft-mgm") +
+      '<span class="ft-join ft-join-p"></span><span class="ft-join ft-join-m"></span>' +
+      familyNode(h, member("father"), "ft-father") + familyNode(h, member("mother"), "ft-mother") +
+      '<span class="ft-join ft-join-c"></span>' +
+      '<div class="ft-children"><div class="ft-node you ' + (conditions.length ? "known" : "none") + '"><span class="ft-rel">' + you.label + '</span><span class="ft-state">' + esc(youText) + "</span></div>" + familyNode(h, member("sibling")) + "</div>" +
+    "</div>" +
+    '<ul class="ft-legend"><li><span class="ft-key known"></span>Có bệnh đã biết</li><li><span class="ft-key none"></span>Không có bệnh đã biết</li><li><span class="ft-key unknown"></span>Chưa rõ</li></ul>' +
+    notes.map(([title, text]) => "<h3>Ghi chú " + title.toLowerCase() + "</h3><p>" + esc(text) + "</p>").join("") + "</article>";
 }
 
 function analysisMarkup(analysis) {
@@ -732,7 +806,6 @@ function bindEvents() {
   $("#simulate-ble").addEventListener("click", startSimulation);
   $("#disconnect-device").addEventListener("click", stopStreams);
   $("#save-device").addEventListener("click", () => saveMeasurement(freshValues(), state.deviceSource || "ble", state.samples.slice()));
-  $("#chart-metric").addEventListener("change", renderChart);
   $("#refresh-history").addEventListener("click", refreshRecords);
   $("#history-filter").addEventListener("change", renderHistory);
   $("#rating-buttons").innerHTML = [1, 2, 3, 4, 5].map(n => '<button type="button" data-rating="' + n + '" aria-pressed="false">' + n + "</button>").join("");
