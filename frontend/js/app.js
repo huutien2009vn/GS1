@@ -45,7 +45,20 @@ function toast(text, type = "") {
   el.className = "toast " + type;
   el.textContent = text;
   $("#toast-region").append(el);
-  setTimeout(() => el.remove(), 4500);
+  setTimeout(() => {
+    el.classList.add("leaving");
+    el.addEventListener("transitionend", () => el.remove(), { once: true });
+    setTimeout(() => el.remove(), 400);
+  }, 4500);
+}
+// Plays the exit animation before the native close, so "close" listeners still fire once, at the end.
+function closeDialog(dialog) {
+  if (!dialog.open || dialog.classList.contains("closing")) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { dialog.close(); return; }
+  dialog.classList.add("closing");
+  const done = () => { dialog.classList.remove("closing"); if (dialog.open) dialog.close(); };
+  dialog.addEventListener("animationend", done, { once: true });
+  setTimeout(done, 250);
 }
 function errorAt(id, text = "") {
   const el = $(id);
@@ -307,7 +320,7 @@ async function deleteAssessment(id) {
   if (!id || !window.confirm("Xóa lần đo này? Không thể khôi phục sau khi xóa.")) return;
   try {
     await api.deleteAssessment(id);
-    $("#result-dialog").close();
+    closeDialog($("#result-dialog"));
     await refreshRecords();
     if (state.view === "history") requestAnimationFrame(renderChart);
     toast("Đã xóa lần đo.");
@@ -458,7 +471,7 @@ async function saveMedicalRecord() {
     const saved = await api.saveMedicalRecord({ analysis: state.pendingMedical.analysis, document_hash: state.pendingMedical.document_hash, health_consent: true });
     if (epoch !== state.authEpoch) return;
     state.medicalRecords = [saved, ...state.medicalRecords.filter(record => record.id !== saved.id)];
-    $("#medical-upload-dialog").close();
+    closeDialog($("#medical-upload-dialog"));
     renderMedicalRecords();
     navigate("records");
     toast("Đã lưu giấy tờ.");
@@ -587,7 +600,7 @@ async function saveMeasurement(values, source, samples = []) {
     state.records = [record, ...state.records].slice(0, 30);
     // Simulated data never replaces a real reading as the current status.
     if (isReal(record) || !state.records.some(isReal)) state.result = r;
-    $("#measurement-dialog").close();
+    closeDialog($("#measurement-dialog"));
     $("#measurement-form").reset();
     stopStreams();
     renderDashboard(); renderHistory(); navigate("dashboard");
@@ -690,7 +703,7 @@ function bindEvents() {
     const nav = event.target.closest("[data-nav]");
     if (nav) navigate(nav.dataset.nav);
     const close = event.target.closest("[data-close]");
-    if (close) $("#" + close.dataset.close).close();
+    if (close) closeDialog($("#" + close.dataset.close));
     const record = event.target.closest("[data-record]");
     if (record) showResult(record.dataset.record);
     const deleteRecord = event.target.closest("[data-delete-record]");
@@ -701,6 +714,7 @@ function bindEvents() {
     if (event.target.closest("#retry-history")) refreshRecords();
   });
   $("#edit-profile").addEventListener("click", editProfile);
+  $$("dialog").forEach(dialog => dialog.addEventListener("cancel", event => { event.preventDefault(); closeDialog(dialog); }));
   $("#delete-assessment").addEventListener("click", event => deleteAssessment(event.currentTarget.dataset.id));
   $("#new-measurement").addEventListener("click", () => openMeasurement());
   $("#upload-record").addEventListener("click", openMedicalUpload);
