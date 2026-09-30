@@ -23,7 +23,7 @@ const METRICS = [
   { key: "glucose", label: "Đường huyết", unit: "mg/dL" },
 ];
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
-const LEVELS = { safe: "Trong ngưỡng an toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm" };
+const LEVELS = { safe: "Trong ngưỡng an toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
 const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Đo lại vào lần sau và ghi chép đều đặn.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
 const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu" };
 const ZONES = {
@@ -33,7 +33,7 @@ const ZONES = {
   glucose: { min: 40, max: 320, zones: [[40, 54, "alert"], [54, 70, "attention"], [70, 180, "safe"], [180, 300, "attention"], [300, 320, "alert"]] },
 };
 const TRENDS = {
-  bp: { unit: "mmHg", band: null, thresholds: [{ value: 140, color: "#0b57a4", label: "Ngưỡng cao tâm thu 140" }, { value: 90, color: "#5fa8e8", label: "Ngưỡng cao tâm trương 90" }], min: 60, max: 160, series: [["systolic", "Tâm thu", "#0b57a4"], ["diastolic", "Tâm trương", "#5fa8e8"]] },
+  bp: { unit: "mmHg", band: null, thresholds: [{ value: 140, color: "#0b57a4", label: "Ngưỡng cao tâm thu 140" }, { value: 90, color: "#3d8fd6", label: "Ngưỡng cao tâm trương 90" }], min: 60, max: 160, series: [["systolic", "Tâm thu", "#0b57a4"], ["diastolic", "Tâm trương", "#3d8fd6"]] },
   heart_rate: { unit: "lần/phút", band: [50, 110], min: 45, max: 120, series: [["heart_rate", "Nhịp tim", "#0b57a4"]] },
   spo2: { unit: "%", band: [95, 100], min: 88, max: 100, series: [["spo2", "SpO₂", "#0b57a4"]] },
   glucose: { unit: "mg/dL", band: [70, 180], min: 50, max: 220, series: [["glucose", "Đường huyết", "#0b57a4"]] },
@@ -72,6 +72,12 @@ function closeDialog(dialog) {
   dialog.addEventListener("animationend", done, { once: true });
   setTimeout(done, 250);
 }
+function confirmAction(title) {
+  const dialog = $("#confirm-dialog");
+  $("#confirm-title").textContent = title;
+  dialog.showModal();
+  return new Promise(resolve => dialog.addEventListener("close", () => resolve(dialog.returnValue === "yes"), { once: true }));
+}
 function errorAt(id, text = "") {
   const el = $(id);
   el.textContent = text;
@@ -82,7 +88,7 @@ function screen(name) {
   if (name !== "app") document.title = "GeneSense - Theo dõi sức khỏe";
   window.scrollTo(0, 0);
 }
-const toDate = value => new Date(value?.endsWith?.("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z");
+const toDate = raw => { const value = String(raw ?? "").replace(/(\.\d{3})\d+/, "$1"); return new Date(value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? value : value + "Z"); };
 function date(value, time = true) {
   const parsed = toDate(value);
   if (Number.isNaN(parsed.getTime())) return "-";
@@ -264,7 +270,8 @@ function renderTips() {
     { title: "Hỏi thêm người thân", action: "Nếu chưa rõ tiền sử bệnh trong gia đình, hãy hỏi bố mẹ rồi cập nhật hồ sơ." },
   ];
   $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => '<article class="tip-card"><img src="' + tipImage(tip) + '" alt="" width="160" height="160" loading="lazy" decoding="async"><div><h3>' + esc(tip.title) + "</h3><p>" + esc(tip.action) + "</p>" + (tip.reason ? '<p class="note">' + esc(tip.reason) + "</p>" : "") + "</div></article>").join("");
-  const followUp = state.result?.insight.follow_up || "";
+  // During the 24h watch window the stored "all fine" follow-up would contradict Today.
+  const followUp = state.result && !isEmergency(state.result) && recentEmergency() ? "" : state.result?.insight.follow_up || "";
   $("#follow-up").textContent = followUp;
   $("#follow-up").classList.toggle("hidden", !followUp);
 }
@@ -282,19 +289,20 @@ function renderEmergency(r) {
 }
 function renderDashboard() {
   const r = state.result;
-  const level = r ? levelOf(r) : "neutral";
+  // Hold an amber "watch" state for 24h after any dangerous real reading, even if a newer one is normal.
+  const recent = r && !isEmergency(r) ? recentEmergency() : null;
+  const level = r ? (recent ? "watch" : levelOf(r)) : "neutral";
   renderEmergency(r);
   const status = $("#risk-status");
-  status.className = "status-word " + (level === "emergency" ? "alert" : level);
+  status.className = "status-word " + ({ emergency: "alert", watch: "attention" }[level] || level);
   status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
-  $("#risk-summary").textContent = r ? (level === "emergency" ? SUMMARY_FALLBACK.emergency : r.insight.summary || SUMMARY_FALLBACK[level]) : "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên.";
+  $("#risk-summary").textContent = !r ? "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên." : level === "emergency" ? SUMMARY_FALLBACK.emergency : level === "watch" ? "Lần đo mới nhất đã trở lại ngưỡng an toàn, nhưng trong 24 giờ qua có lần đo ở mức nguy hiểm." : r.insight.summary || SUMMARY_FALLBACK[level];
   $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() + (r.measurement_source === "simulation" ? " (không phải dữ liệu thật)" : "") : "";
   // While the emergency panel is up it is the only call to action; the score would read as reassurance.
   $("#score-details").classList.toggle("hidden", !r || level === "emergency");
   $("#new-measurement").classList.toggle("hidden", level === "emergency");
-  const recent = level === "emergency" ? null : recentEmergency();
   $("#recent-emergency").classList.toggle("hidden", !recent);
-  if (recent) $("#recent-emergency").textContent = "Lần đo lúc " + date(recent.created_at) + " ở mức nguy hiểm. Hãy tiếp tục đo và liên hệ bác sĩ nếu chỉ số lại tăng cao.";
+  if (recent) $("#recent-emergency").textContent = "Lần đo lúc " + date(recent.created_at) + " ở mức nguy hiểm. Đo lại sau 1 giờ. Nếu lại ở mức nguy hiểm hoặc có triệu chứng, liên hệ bác sĩ ngay trong hôm nay.";
   $("#result-alerts").innerHTML = r && level !== "emergency" ? alertsMarkup(r) : "";
   if (r) {
     $("#risk-score").textContent = Math.round(r.scores.overall);
@@ -367,7 +375,7 @@ function renderHistory() {
   }).join("") + "</tbody></table>";
 }
 async function deleteAssessment(id) {
-  if (!id || !window.confirm("Xóa lần đo này? Không thể khôi phục sau khi xóa.")) return;
+  if (!id || !await confirmAction("Xóa lần đo này?")) return;
   try {
     await api.deleteAssessment(id);
     closeDialog($("#result-dialog"));
@@ -430,7 +438,7 @@ function renderProfile() {
       "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>" +
     "</dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" +
     '<article class="panel"><h2>Tiền sử bệnh trong gia đình</h2><div class="ft-summary">' + familySummary(h) + "</div>" +
-    '<div class="family-tree" role="img" aria-label="Sơ đồ gia đình ba thế hệ">' +
+    '<div class="family-tree" role="group" aria-label="Sơ đồ gia đình ba thế hệ">' +
       '<span class="ft-side ft-side-p">Bên nội</span><span class="ft-side ft-side-m">Bên ngoại</span>' +
       familyNode(h, member("paternal-grandfather"), "ft-pgf") + familyNode(h, member("paternal-grandmother"), "ft-pgm") +
       familyNode(h, member("maternal-grandfather"), "ft-mgf") + familyNode(h, member("maternal-grandmother"), "ft-mgm") +
@@ -574,7 +582,7 @@ async function saveMedicalRecord() {
 }
 
 async function deleteMedicalRecord(id) {
-  if (!window.confirm("Xóa giấy tờ này? Không thể khôi phục sau khi xóa.")) return;
+  if (!await confirmAction("Xóa giấy tờ này?")) return;
   try {
     await api.deleteMedicalRecord(id);
     state.medicalRecords = state.medicalRecords.filter(record => record.id !== id);
@@ -698,6 +706,7 @@ async function saveMeasurement(values, source, samples = []) {
     $("#measurement-form").reset();
     stopStreams();
     renderDashboard(); renderHistory(); navigate("dashboard");
+    if (isEmergency(r) && state.result?.id === r.id) $("#emergency-title").focus();
     if (state.result?.id !== r.id) toast("Đã lưu lần đo mẫu vào Lịch sử đo. Tình trạng hôm nay vẫn theo số đo của bạn.");
     else if (!isEmergency(r)) toast("Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
@@ -742,7 +751,6 @@ async function enterAccount(user) {
     state.editing = false; fillWizard(); screen("onboarding");
   } else {
     personalize(); screen("app");
-    renderDashboard();
     await Promise.all([refreshRecords(), refreshMedicalRecords()]);
     navigate(location.hash.slice(1) || "dashboard");
   }
