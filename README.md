@@ -195,6 +195,10 @@ Model khả dụng phụ thuộc tài khoản Google AI Studio. Nếu Google tha
 
 Các API thay đổi dữ liệu yêu cầu cookie phiên cùng header `X-Requested-With`; dữ liệu được giới hạn theo `user_id` ở backend.
 
+## Ảnh minh họa
+
+Ảnh trong `frontend/assets/tips/` lấy từ [Pexels](https://www.pexels.com/license/) (miễn phí, không bắt buộc ghi nguồn) và được lưu cùng ứng dụng để không gửi yêu cầu ra bên thứ ba: 54326, 7129126, 8088865, 17072088, 30834708, 34889040, 10894046.
+
 ## Kiểm thử
 
 ```powershell

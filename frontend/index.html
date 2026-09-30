@@ -128,6 +128,11 @@
 
       <section id="history-view" class="view hidden">
         <div class="page-heading"><h1>Lịch sử đo</h1><button class="btn outline" id="refresh-history">Tải lại</button></div>
+        <section class="section advice" aria-labelledby="advice-title">
+          <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2><p class="note">Dựa trên hồ sơ và lần đo gần nhất</p></div>
+          <div id="tip-list" class="tip-grid"></div>
+          <p id="follow-up" class="follow-up hidden"></p>
+        </section>
         <section class="section" aria-labelledby="trend-title">
           <div class="section-heading"><h2 id="trend-title">Diễn biến chỉ số</h2><p id="chart-context" class="note"></p></div>
           <div class="trend-grid">
@@ -139,7 +144,6 @@
           <p class="note">Vùng nền xanh là ngưỡng an toàn tham khảo; với huyết áp, đường nét đứt là ngưỡng cao. Rê chuột hoặc dùng phím mũi tên trên biểu đồ để xem từng lần đo.</p>
         </section>
         <article class="panel"><div class="panel-heading"><h2>Các lần đo</h2><label class="inline-select">Hiển thị<select id="history-filter"><option value="all">Tất cả</option><option value="real">Dữ liệu của tôi</option><option value="simulation">Dữ liệu mẫu</option></select></label></div><div id="history-list"></div></article>
-        <article class="panel"><h2>Lời khuyên</h2><ul id="tip-list" class="tip-list"></ul><p id="follow-up" class="note"></p></article>
       </section>
 
       <section id="records-view" class="view hidden">

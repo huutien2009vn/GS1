@@ -239,14 +239,29 @@ function renderMetrics() {
     return '<div class="reading"><span class="reading-name">' + m.label + "</span>" + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></span>" + rangeBar(m.key, values[m.key]) : '<span class="reading-value empty">Chưa đo</span>') + flag + "</div>";
   }).join("");
 }
+// Stock photos (Pexels, self-hosted) chosen by the tip's topic; order matters ("thuốc lá" before generic words).
+const TIP_IMAGES = [
+  [/thuốc lá|hút thuốc|bỏ thuốc|cai thuốc/, "smoking"],
+  [/huyết áp/, "blood-pressure"],
+  [/đường huyết|đường máu|tiểu đường|đái tháo đường|trước ăn|sau ăn/, "glucose"],
+  [/vận động|đi bộ|tập|chạy|thể dục/, "activity"],
+  [/(?<!\p{L})ăn(?!\p{L})|rau|khẩu phần|cân nặng|muối|đồ uống/u, "diet"],
+  [/gia đình|bố mẹ|người thân/, "family"],
+];
+const tipImage = tip => {
+  const text = (tip.title + " " + tip.action).toLowerCase();
+  return "/assets/tips/" + (TIP_IMAGES.find(([pattern]) => pattern.test(text))?.[1] || "routine") + ".jpg";
+};
 function renderTips() {
   const tips = state.result?.insight.tips || [
     { title: "Bắt đầu với một chỉ số", action: "Có thể chỉ nhập huyết áp hoặc nhịp tim. Không cần đủ tất cả chỉ số." },
     { title: "Đo trong cùng điều kiện", action: "Ngồi nghỉ 5 phút trước khi đo và làm theo hướng dẫn của máy đo." },
     { title: "Hỏi thêm người thân", action: "Nếu chưa rõ tiền sử bệnh trong gia đình, hãy hỏi bố mẹ rồi cập nhật hồ sơ." },
   ];
-  $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => "<li><strong>" + esc(tip.title) + ".</strong> " + esc(tip.action) + "</li>").join("");
-  $("#follow-up").textContent = state.result?.insight.follow_up || "";
+  $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => '<article class="tip-card"><img src="' + tipImage(tip) + '" alt="" width="160" height="160" loading="lazy" decoding="async"><div><h3>' + esc(tip.title) + "</h3><p>" + esc(tip.action) + "</p>" + (tip.reason ? '<p class="note">' + esc(tip.reason) + "</p>" : "") + "</div></article>").join("");
+  const followUp = state.result?.insight.follow_up || "";
+  $("#follow-up").textContent = followUp;
+  $("#follow-up").classList.toggle("hidden", !followUp);
 }
 function alertsMarkup(result) {
   return result.alerts.filter(a => a.severity !== "safe").map(a => '<div class="alert-item ' + a.severity + '"><strong>' + esc(a.metric) + ":</strong> " + esc(a.message) + "</div>").join("");

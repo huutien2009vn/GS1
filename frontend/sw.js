@@ -1,6 +1,6 @@
 // Only cache the public shell. Account and health API responses are never cached.
-const CACHE = "genesense-v7";
-const SHELL = ["/", "/assets/styles.css", "/assets/favicon.svg", "/js/app.js", "/js/api.js", "/js/ble.js", "/js/chart.js", "/js/icons.js"];
+const CACHE = "genesense-v8";
+const SHELL = ["/", "/assets/styles.css", "/assets/favicon.svg", "/js/app.js", "/js/api.js", "/js/ble.js", "/js/chart.js", "/js/icons.js", ...["activity", "diet", "blood-pressure", "glucose", "smoking", "routine", "family"].map(name => "/assets/tips/" + name + ".jpg")];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
