@@ -860,6 +860,8 @@ function bindEvents() {
   });
   window.addEventListener("session-expired", () => { clearAccount(); screen("login"); errorAt("#login-message", "Phiên đã hết hạn. Hãy đăng nhập lại để tiếp tục."); });
   accountChannel?.addEventListener("message", () => { clearAccount(); boot(); });
+  // Links like the header logo only change the hash; route on every hash change (also back/forward).
+  window.addEventListener("hashchange", () => { if (state.user && state.health) navigate(location.hash.slice(1) || "dashboard"); });
   window.addEventListener("pagehide", stopStreams);
   window.addEventListener("pageshow", event => { if (event.persisted) { clearAccount(); boot(); } });
   document.addEventListener("visibilitychange", async () => {
