@@ -68,6 +68,9 @@ async def privacy_and_csrf(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     if request.url.path.startswith("/api/") or request.url.path in {"/", "/sw.js"}:
         response.headers["Cache-Control"] = "no-store"
+    elif request.url.path.startswith(("/assets/", "/js/")):
+        # Without this the browser guesses a lifetime and can pair a fresh page with a stale stylesheet or script.
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 
