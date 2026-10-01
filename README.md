@@ -159,26 +159,15 @@ Ghi chú:
 
 Dùng khi cần cho người khác xem nhanh mà chưa đưa lên hosting. Máy phải bật suốt thời gian đó và đường link đổi sau mỗi lần chạy.
 
-```powershell
-cloudflared tunnel --url http://localhost:8001
-```
-
-Chép địa chỉ `https://....trycloudflare.com` mà lệnh in ra vào file `.env.public` (không commit):
-
-```dotenv
-APP_BASE_URL=https://ten-ngau-nhien.trycloudflare.com
-CORS_ORIGINS=https://ten-ngau-nhien.trycloudflare.com
-DEMO_PUBLIC=true
-DATABASE_URL=sqlite+aiosqlite:///./public-trial.db
-```
-
-rồi chạy server thứ hai trên cổng 8001 (cấu hình `genesense-public` trong `.claude/launch.json`):
+Cần có `cloudflared-windows-amd64.exe` (tải từ [cloudflare/cloudflared](https://github.com/cloudflare/cloudflared/releases)) trong thư mục `.tools`. Sau đó, trong PowerShell tại thư mục dự án:
 
 ```powershell
-.venv\Scripts\python -m uvicorn backend.app.main:app --env-file .env.public --host 127.0.0.1 --port 8001
+.\start-public.ps1
 ```
 
-Database riêng `public-trial.db` giữ cho khách dùng thử không đụng vào dữ liệu trong `healthpredict.db`.
+Script mở tunnel, ghi địa chỉ `https://....trycloudflare.com` vào `.env.public`, in địa chỉ đó ra màn hình rồi chạy server thứ hai trên cổng 8001. Bấm Ctrl+C để dừng cả server lẫn tunnel.
+
+Server này dùng database riêng `public-trial.db`, nên khách dùng thử không đụng vào dữ liệu trong `healthpredict.db`. Cấu hình `genesense-public` trong `.claude/launch.json` chạy cùng server đó khi `.env.public` đã có sẵn.
 
 Không commit `.env`, Google Client Secret, `SESSION_SECRET` hoặc API key. Nút Google tự bị vô hiệu hóa nếu server chưa có đủ thông tin OAuth.
 
