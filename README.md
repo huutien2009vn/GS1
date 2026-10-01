@@ -116,6 +116,57 @@ APP_BASE_URL=https://TEN-MIEN
 ENABLE_DEMO_LOGIN=false
 ```
 
+### Cho người khác dùng thử qua đường link
+
+Mặc định nút **Dùng thử với hồ sơ mẫu** chỉ hoạt động trên chính máy chạy server. Để ai có đường link cũng dùng thử được, đặt trong `.env`:
+
+```dotenv
+DEMO_PUBLIC=true
+DEMO_ACCOUNTS_PER_HOUR=10
+DEMO_RETENTION_DAYS=3
+```
+
+- Giới hạn tính chung cho cả hệ thống: tối đa 10 tài khoản dùng thử mới trong 60 phút gần nhất. Quá giới hạn, server trả 429 và màn hình đăng nhập báo thử lại sau.
+- Tài khoản dùng thử tạo quá 3 ngày sẽ tự bị xóa cùng số đo, giấy tờ, góp ý và liên kết chia sẻ của nó. Việc dọn chạy mỗi khi có người bấm dùng thử, và chỉ khi `DEMO_PUBLIC=true`.
+- Tài khoản dùng thử không bao giờ gọi AI, nên không tốn phí API.
+- Người ở máy khác chỉ vào được khi server lắng nghe ngoài `127.0.0.1` (`--host 0.0.0.0`) và `APP_BASE_URL`, `CORS_ORIGINS` trỏ đúng địa chỉ họ mở. Khi đưa lên mạng công khai, dùng HTTPS với `APP_ENV=production` và `SESSION_SECRET` dài từ 32 ký tự.
+
+### Đưa lên mạng bằng Render và Neon
+
+File `render.yaml` ở thư mục gốc mô tả sẵn một dịch vụ web miễn phí.
+
+1. Tạo database trên [Neon](https://neon.tech) và chép chuỗi kết nối (`postgresql://...`).
+2. Trên [Render](https://render.com): **New > Blueprint**, chọn repo này. Render đọc `render.yaml` và tự tạo `SESSION_SECRET`.
+3. Điền hai biến còn thiếu: `DATABASE_URL` (chuỗi của Neon) và `APP_BASE_URL` (địa chỉ `https://...onrender.com` mà Render cấp cho dịch vụ).
+4. Deploy lại. Mở địa chỉ đó và bấm **Dùng thử với hồ sơ mẫu**.
+
+Gói miễn phí của Render tự ngủ khi không ai dùng, nên lần mở đầu tiên có thể mất khoảng một phút. Web Bluetooth và cài PWA cần HTTPS, Render đã có sẵn.
+
+### Đường link tạm từ máy này (Cloudflare Tunnel)
+
+Dùng khi cần cho người khác xem nhanh mà chưa đưa lên hosting. Máy phải bật suốt thời gian đó và đường link đổi sau mỗi lần chạy.
+
+```powershell
+cloudflared tunnel --url http://localhost:8001
+```
+
+Chép địa chỉ `https://....trycloudflare.com` mà lệnh in ra vào file `.env.public` (không commit):
+
+```dotenv
+APP_BASE_URL=https://ten-ngau-nhien.trycloudflare.com
+CORS_ORIGINS=https://ten-ngau-nhien.trycloudflare.com
+DEMO_PUBLIC=true
+DATABASE_URL=sqlite+aiosqlite:///./public-trial.db
+```
+
+rồi chạy server thứ hai trên cổng 8001 (cấu hình `genesense-public` trong `.claude/launch.json`):
+
+```powershell
+.venv\Scripts\python -m uvicorn backend.app.main:app --env-file .env.public --host 127.0.0.1 --port 8001
+```
+
+Database riêng `public-trial.db` giữ cho khách dùng thử không đụng vào dữ liệu trong `healthpredict.db`.
+
 Không commit `.env`, Google Client Secret, `SESSION_SECRET` hoặc API key. Nút Google tự bị vô hiệu hóa nếu server chưa có đủ thông tin OAuth.
 
 ## Kết nối Neon PostgreSQL

@@ -6,13 +6,13 @@ from datetime import datetime, timedelta, timezone
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
 from .database import get_session
-from .models import LoginSession, User
+from .models import Assessment, CareInvite, CareLink, Feedback, LoginSession, MedicalRecord, User
 
 settings = get_settings()
 router = APIRouter(prefix="/api/auth", tags=["Account"])
@@ -116,9 +116,34 @@ async def google_callback(request: Request, session: AsyncSession = Depends(get_
     return await issue_session(request, response, user, session)
 
 
+async def purge_old_trial_accounts(session: AsyncSession) -> int:
+    """Delete public trial accounts older than the retention period, with everything they own."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.demo_retention_days)
+    ids = list(await session.scalars(select(User.id).where(User.is_demo, User.created_at < cutoff)))
+    if not ids:
+        return 0
+    for model in (LoginSession, Assessment, Feedback, MedicalRecord):
+        await session.execute(delete(model).where(model.user_id.in_(ids)))
+    await session.execute(delete(CareInvite).where(CareInvite.patient_id.in_(ids)))
+    await session.execute(delete(CareLink).where(or_(CareLink.patient_id.in_(ids), CareLink.caregiver_id.in_(ids))))
+    await session.execute(delete(User).where(User.id.in_(ids)))
+    return len(ids)
+
+
 @router.post("/demo")
 async def demo_login(request: Request, session: AsyncSession = Depends(get_session)):
-    if not settings.demo_enabled or not request.client or request.client.host not in {"127.0.0.1", "::1", "testclient"}:
+    if not settings.demo_enabled:
+        raise HTTPException(404)
+    if settings.demo_public:
+        # One shared cap for the whole site: counted in the database, so it holds across workers and
+        # cannot be dodged by changing address. ponytail: no per-visitor limit; add one if a single visitor uses up the hour.
+        # ponytail: cleanup runs when someone asks for a trial account; add a scheduled job if the site sits idle for long.
+        await purge_old_trial_accounts(session)
+        since = datetime.now(timezone.utc) - timedelta(hours=1)
+        recent = await session.scalar(select(func.count()).select_from(User).where(User.is_demo, User.created_at >= since))
+        if recent >= settings.demo_accounts_per_hour:
+            raise HTTPException(429, "Đã đủ số tài khoản dùng thử trong giờ này. Hãy thử lại sau ít phút.")
+    elif not request.client or request.client.host not in {"127.0.0.1", "::1", "testclient"}:
         raise HTTPException(404)
     user = User(display_name="Khách trải nghiệm", is_demo=True)
     session.add(user)

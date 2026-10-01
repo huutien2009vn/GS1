@@ -4,14 +4,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, func, inspect, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app import auth
 from backend.app import main
 from backend.app.database import get_session
 from backend.app.migrations import migrate_schema
-from backend.app.models import LoginSession, User
+from backend.app.models import Assessment, LoginSession, User
 from backend.app.schemas import MedicalDocumentAnalysis
 
 HEADERS = {"X-Requested-With": "HealthPredict", "Origin": "http://localhost:8000"}
@@ -201,6 +201,57 @@ def test_google_failure_does_not_create_session(client, monkeypatch):
 def test_demo_login_disabled_outside_development(client, monkeypatch):
     monkeypatch.setattr(auth.settings, "app_env", "production")
     assert client.get("/api/auth/config").json()["demo_enabled"] is False
+    assert client.post("/api/auth/demo").status_code == 404
+
+
+def test_public_trial_login_is_capped_per_hour(client, monkeypatch):
+    monkeypatch.setattr(auth.settings, "app_env", "production")
+    monkeypatch.setattr(auth.settings, "app_base_url", "https://demo.example")
+    monkeypatch.setattr(auth.settings, "demo_public", True)
+    monkeypatch.setattr(auth.settings, "demo_accounts_per_hour", 6)
+    monkeypatch.setattr(auth.settings, "demo_retention_days", 3)
+    assert client.get("/api/auth/config").json()["demo_enabled"] is True
+    for _ in range(6):
+        client.cookies.clear()
+        assert client.post("/api/auth/demo").status_code == 200
+    client.cookies.clear()
+    blocked = client.post("/api/auth/demo")
+    assert blocked.status_code == 429 and "dùng thử" in blocked.json()["detail"]
+
+    async def age_accounts():
+        async with client.db_factory() as session:
+            await session.execute(update(User).values(created_at=datetime.now(timezone.utc) - timedelta(hours=2)))
+            await session.commit()
+    asyncio.run(age_accounts())
+    created = client.post("/api/auth/demo")
+    assert created.status_code == 200  # the hour has passed
+
+    # After the retention period the old trial accounts and their data are removed; newer ones stay.
+    fresh = created.json()["id"]
+    _as(client, created.cookies[auth.COOKIE_NAME])  # the cookie is Secure, so the http test client needs it set by hand
+    assert client.put("/api/profile", json=PROFILE).status_code == 200
+    assert client.post("/api/assessments", json=MEASUREMENT).status_code == 201
+
+    async def age_all_but(keep_id, **delta):
+        async with client.db_factory() as session:
+            await session.execute(update(User).where(User.id != keep_id).values(created_at=datetime.now(timezone.utc) - timedelta(**delta)))
+            await session.commit()
+
+    async def counts():
+        async with client.db_factory() as session:
+            return (await session.scalar(select(func.count()).select_from(User)),
+                    await session.scalar(select(func.count()).select_from(Assessment)))
+    asyncio.run(age_all_but(fresh, days=4))
+    assert asyncio.run(counts()) == (7, 1)
+    client.cookies.clear()
+    assert client.post("/api/auth/demo").status_code == 200
+    assert asyncio.run(counts()) == (2, 1)  # the fresh account with its reading, plus the one just created
+    asyncio.run(age_all_but("", days=4))
+    client.cookies.clear()
+    assert client.post("/api/auth/demo").status_code == 200
+    assert asyncio.run(counts()) == (1, 0)  # the aged account's reading went with it
+    # The switch alone decides: without it, a non-local deployment offers no trial login.
+    monkeypatch.setattr(auth.settings, "demo_public", False)
     assert client.post("/api/auth/demo").status_code == 404
 
 

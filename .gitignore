@@ -11,3 +11,6 @@ healthpredict.db
 HealthPredictAI-Core-*.zip
 .DS_Store
 .sites-runtime/
+.env.public
+public-trial.db
+.tools/
