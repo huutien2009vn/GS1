@@ -127,7 +127,7 @@
       </section>
 
       <section id="history-view" class="view hidden">
-        <div class="page-heading"><h1>Lịch sử đo</h1><button class="btn outline" id="refresh-history">Tải lại</button></div>
+        <div class="page-heading"><h1>Lịch sử đo</h1><div class="heading-actions"><button class="btn outline" id="refresh-history">Tải lại</button><button class="btn primary" id="open-report">Lập phiếu tổng hợp</button></div></div>
         <section class="section advice" aria-labelledby="advice-title">
           <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2></div>
           <div id="tip-list" class="tip-grid"></div>
@@ -177,6 +177,10 @@
     </div>
     <div id="review-stage" class="hidden"><h3>Kiểm tra trước khi lưu</h3><p class="note">Nội dung do AI đọc có thể sai. Hãy đối chiếu với giấy tờ gốc.</p><div id="document-analysis-preview"></div><label class="check-label confirm-record"><input id="confirm-medical-record" type="checkbox"><span>Tôi đã kiểm tra và muốn lưu nội dung này.</span></label><p id="record-save-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions"><button id="analyze-another" class="btn outline">Chọn ảnh khác</button><button id="save-medical-record" class="btn primary" disabled>Lưu vào hồ sơ</button></div></div>
   </dialog>
+  <section id="report-screen" class="report-screen hidden" aria-labelledby="report-title">
+    <div class="report-toolbar"><button class="btn outline" id="report-back">Quay lại</button><label class="inline-select">Kỳ báo cáo<select id="report-days"><option value="7">7 ngày</option><option value="30" selected>30 ngày</option><option value="90">90 ngày</option></select></label><button class="btn primary" id="report-print">In / Lưu PDF</button></div>
+    <article id="report-sheet" class="report-sheet"></article>
+  </section>
   <dialog id="confirm-dialog" class="confirm-dialog"><form method="dialog"><h2 id="confirm-title">Xóa?</h2><p>Không thể khôi phục sau khi xóa.</p><div class="dialog-actions"><button class="btn outline" value="no">Hủy</button><button class="btn danger" value="yes">Xóa</button></div></form></dialog>
   <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
   <noscript>Vui lòng bật JavaScript để sử dụng GeneSense.</noscript>

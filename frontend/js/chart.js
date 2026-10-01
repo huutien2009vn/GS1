@@ -87,7 +87,7 @@ export class TrendChart {
     const labels = [];
     for (const s of c.series) {
       const d = s.values.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
-      if (n > 1) svg.append(el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      if (n > 1) svg.append(el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", ...(s.dash ? { "stroke-dasharray": s.dash } : {}) }));
       s.values.forEach((v, i) => {
         const last = i === n - 1;
         svg.append(el("circle", { cx: x(i), cy: y(v), r: 4, fill: last ? s.color : "#fff", stroke: s.color, "stroke-width": 2 }));
