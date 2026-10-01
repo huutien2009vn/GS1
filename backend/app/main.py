@@ -41,7 +41,9 @@ async def lifespan(_: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title=settings.app_name, version="2.0.0", lifespan=lifespan)
+# The interactive API pages are a development aid; a public deployment does not publish them.
+api_pages = {} if settings.app_env == "development" else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title=settings.app_name, version="2.0.0", lifespan=lifespan, **api_pages)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret or secrets.token_urlsafe(48),
                    session_cookie="healthpredict_oauth", max_age=600,
                    same_site="lax", https_only=settings.secure_cookies)

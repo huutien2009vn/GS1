@@ -187,6 +187,7 @@ function showStep() {
 }
 function validCurrentStep() {
   const active = $('[data-step="' + state.step + '"]');
+  errorAt("#onboarding-error");
   const invalid = [...active.querySelectorAll("input, select, textarea")].find(el => !el.checkValidity());
   if (invalid) { invalid.reportValidity(); invalid.focus(); return false; }
   const missing = [...active.querySelectorAll("[data-member]")].find(el => el.querySelector("select").value === "known" && !el.querySelector("input:checked"));
@@ -339,6 +340,8 @@ function renderDashboard() {
   renderMetrics();
   renderTips();
 }
+// Charts show what the readings table shows: whole numbers, except SpO₂ which keeps one decimal.
+const chartValue = (key, value) => key === "spo2" ? value : Math.round(value);
 function renderTrends() {
   const source = state.result?.measurement_source;
   // Every source shares one chart: typed-in, Bluetooth and sample readings.
@@ -352,13 +355,13 @@ function renderTrends() {
     host.classList.toggle("hidden", !points.length);
     card.querySelector(".trend-legend")?.classList.toggle("hidden", !points.length);
     const last = points.at(-1);
-    const latest = last ? spec.series.map(([key]) => num(last.vitals[key])).join("/") + (spec.unit === "%" ? "" : " ") + spec.unit : "";
+    const latest = last ? withUnit(valueOf(spec.series[0][0], last.vitals), spec.unit) : "";
     card.querySelector(".trend-latest").textContent = last ? "Gần nhất: " + latest : "";
     $("#trend-" + id + "-summary").textContent = last ? points.length + " lần đo. Gần nhất " + latest + " lúc " + date(last.created_at) + "." : "";
     if (!points.length) continue;
     trendCharts[id] ||= new TrendChart(host);
     trendCharts[id].set({ unit: spec.unit, band: spec.band, thresholds: spec.thresholds, min: spec.min, max: spec.max, times: points.map(row => toDate(row.created_at)),
-      series: spec.series.map(([key, label, color]) => ({ label, color, values: points.map(row => row.vitals[key]) })) });
+      series: spec.series.map(([key, label, color]) => ({ label, color, values: points.map(row => chartValue(key, row.vitals[key])) })) });
   }
 }
 function pickCurrent(rows) {
@@ -625,7 +628,7 @@ function renderReport() {
     figure.querySelector("figcaption").textContent = { bp: "Huyết áp (mmHg)", heart_rate: "Nhịp tim (lần/phút)", spo2: "SpO₂ (%)", glucose: "Đường huyết (mg/dL)" }[id];
     reportCharts[id] = new TrendChart(figure.querySelector(".trend-chart"));
     reportCharts[id].set({ unit: spec.unit, band: spec.band, thresholds: spec.thresholds?.map(t => ({ ...t, color: "#555" })), min: spec.min, max: spec.max, times: points.map(row => toDate(row.created_at)),
-      series: spec.series.map(([key, label], index) => ({ label, color: "#000", dash: index ? "6 4" : "", values: points.map(row => row.vitals[key]) })) });
+      series: spec.series.map(([key, label], index) => ({ label, color: "#000", dash: index ? "6 4" : "", values: points.map(row => chartValue(key, row.vitals[key])) })) });
   }
 }
 function openReport() { screen("report"); document.title = "Phiếu tổng hợp - GeneSense"; renderReport(); }
@@ -978,8 +981,9 @@ async function saveMeasurement(values, source, samples = []) {
     closeDialog($("#measurement-dialog"));
     $("#measurement-form").reset();
     stopStreams();
+    // The new reading was scored against the current profile, so its scores are the live ones.
+    if (state.risk) state.risk.scores = r.scores;
     renderDashboard(); renderHistory(); navigate("dashboard");
-    refreshRisk();
     if (isEmergency(r)) $("#emergency-title").focus();
     else toast("Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
@@ -1077,7 +1081,8 @@ function bindEvents() {
       chips.hidden = event.target.value !== "known";
       if (chips.hidden) chips.querySelectorAll("input").forEach(input => input.checked = false);
       const count = chips.parentElement.querySelector(".member-count");
-      if (count) count.hidden = chips.hidden;
+      // Reset the hidden field: an out-of-range number left in it would block the step with no visible message.
+      if (count) { count.hidden = chips.hidden; if (chips.hidden) count.querySelector("input").value = 1; }
     }
   });
   $("#step-back").addEventListener("click", () => { state.step = Math.max(0, state.step - 1); showStep(); });
