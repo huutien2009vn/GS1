@@ -88,6 +88,7 @@
       <nav class="main-nav" aria-label="Điều hướng chính"><div class="main-nav-inner">
         <button data-nav="dashboard" class="active">Hôm nay</button>
         <button data-nav="history">Lịch sử đo</button>
+        <button data-nav="genetics">Di truyền</button>
         <button data-nav="records" class="own-only">Giấy tờ</button>
         <button data-nav="profile">Hồ sơ</button>
       </div></nav>
@@ -118,7 +119,9 @@
           <details id="score-details" class="score-details hidden"><summary>Cách tính kết quả</summary>
             <p>Điểm sàng lọc: <strong id="risk-score">-</strong> trên 100. Điểm càng thấp càng tốt.</p>
             <dl class="score-list"><div><dt>Tiền sử gia đình</dt><dd id="pgrs-score">-</dd></div><div><dt>Thể trạng</dt><dd id="brs-score">-</dd></div><div><dt>Chỉ số đo</dt><dd id="vital-score">-</dd></div></dl>
+            <p id="score-family-note" class="note hidden"></p>
             <p class="note">Điểm minh họa, không phải xác suất mắc bệnh hay kết quả xét nghiệm gen. Chỉ số chưa đo không được tính là bình thường.</p>
+            <button class="link-button" data-nav="genetics">Xem nguy cơ theo từng bệnh</button>
           </details>
         </article>
 
@@ -156,6 +159,11 @@
         </section>
       </section>
 
+      <section id="genetics-view" class="view hidden">
+        <div class="page-heading"><div><h1>Di truyền</h1><p id="genetics-lead" class="lead" aria-live="polite"></p></div></div>
+        <div id="genetics-content"></div>
+      </section>
+
       <section id="records-view" class="view hidden">
         <div class="page-heading"><div><h1>Giấy tờ sức khỏe</h1><p class="lead">Kết quả xét nghiệm, đơn thuốc, giấy khám. Chỉ lưu nội dung bạn đã kiểm tra; không lưu ảnh gốc.</p></div><button class="btn primary" id="upload-record">Thêm ảnh giấy tờ</button></div>
         <p id="records-ai-off" class="note hidden">Tính năng đọc ảnh giấy tờ sẽ có trong bản chính thức.</p>
@@ -171,7 +179,7 @@
 
       <p class="legal-note">GeneSense hỗ trợ theo dõi sức khỏe, không phải thiết bị y tế và không thay thế chẩn đoán của bác sĩ. Khi có dấu hiệu cấp cứu, gọi 115.</p>
     </main>
-    <nav class="mobile-nav" aria-label="Điều hướng"><button data-nav="dashboard"><span data-icon="grid"></span>Hôm nay</button><button data-nav="history"><span data-icon="history"></span>Lịch sử đo</button><button data-nav="records" class="own-only"><span data-icon="document"></span>Giấy tờ</button><button data-nav="profile"><span data-icon="family"></span>Hồ sơ</button></nav>
+    <nav class="mobile-nav" aria-label="Điều hướng"><button data-nav="dashboard"><span data-icon="grid"></span>Hôm nay</button><button data-nav="history"><span data-icon="history"></span>Lịch sử</button><button data-nav="genetics"><span data-icon="family"></span>Di truyền</button><button data-nav="records" class="own-only"><span data-icon="document"></span>Giấy tờ</button><button data-nav="profile"><span data-icon="user"></span>Hồ sơ</button></nav>
   </div>
 
   <dialog id="measurement-dialog"><div class="dialog-heading"><h2>Ghi chỉ số</h2><button class="icon-button" data-close="measurement-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>

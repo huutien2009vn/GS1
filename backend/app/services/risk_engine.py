@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from ..schemas import (
+    AccountProfile,
     AIInsight,
     AlertItem,
     AssessmentCreate,
@@ -21,7 +22,12 @@ CONDITION_WEIGHTS = {
     "diabetes": 2.0,
     "cardiovascular": 2.4,
     "stroke": 2.5,
+    "dyslipidemia": 1.2,
+    # Cancers are tracked for the family-risk screen only; they do not move the cardiometabolic score.
+    "breast_cancer": 0.0,
+    "colorectal_cancer": 0.0,
 }
+CARDIOMETABOLIC = {"hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia"}
 F1_RELATIONS = {"father", "mother", "sibling"}
 
 
@@ -44,8 +50,8 @@ def calculate_pgrs(payload: AssessmentCreate) -> float:
     for member in payload.family_history:
         relation_factor = 1.0 if member.relation in F1_RELATIONS else 0.55
         for condition in set(member.conditions):
-            burden += CONDITION_WEIGHTS[condition] * relation_factor
-            if relation_factor == 1.0:
+            burden += CONDITION_WEIGHTS[condition] * relation_factor * min(member.affected_count, 3)
+            if relation_factor == 1.0 and CONDITION_WEIGHTS[condition]:
                 unique_close_conditions.add(condition)
 
     # Saturating curve prevents large families from making the score unbounded.
@@ -62,14 +68,14 @@ def calculate_brs(payload: AssessmentCreate) -> float:
 
     if bmi < 18.5:
         score += min(12, (18.5 - bmi) * 2.5)
-    elif bmi >= 25:
-        score += min(25, (bmi - 25) * 2.25)
+    elif bmi >= 23:  # Asian cut-off, the same one the profile label and the advice use
+        score += min(25, (bmi - 23) * 2.25)
 
     if profile.smoker:
         score += 18
     if profile.activity_minutes_week < 150:
         score += (150 - profile.activity_minutes_week) / 150 * 14
-    score += min(24, len(set(profile.known_conditions)) * 8)
+    score += min(24, len(set(profile.known_conditions) & CARDIOMETABOLIC) * 8)
     return round(clamp(score), 1)
 
 
@@ -233,6 +239,78 @@ def _rule_tips(payload: AssessmentCreate, level: str, alerts: list[AlertItem]) -
     )
 
 
+def fuse(pgrs: float, brs: float, vitals: float) -> float:
+    # Multiplicative three-layer fusion. Each layer amplifies the others.
+    return round(clamp(((1 + pgrs / 100) * (1 + brs / 100) * (1 + vitals / 100) - 1) / 7 * 100), 1)
+
+
+# What to do for each condition when the family history raises the level. General screening habits only,
+# worded as things to raise with a doctor; nothing here is a diagnosis or a schedule.
+FAMILY_ADVICE = {
+    "hypertension": "Đo huyết áp tại nhà đều đặn và ghi lại. Ăn nhạt hơn và nói với bác sĩ về tiền sử gia đình này.",
+    "diabetes": "Hỏi bác sĩ về xét nghiệm đường huyết định kỳ. Giữ cân nặng và giảm đồ ngọt, tinh bột trắng.",
+    "cardiovascular": "Hỏi bác sĩ về kiểm tra huyết áp, mỡ máu và đường huyết. Không hút thuốc và vận động đều.",
+    "stroke": "Giữ huyết áp ổn định. Nên biết dấu hiệu đột quỵ: méo miệng, yếu tay chân, nói khó xuất hiện đột ngột. Khi thấy, gọi cấp cứu 115.",
+    "dyslipidemia": "Hỏi bác sĩ về xét nghiệm mỡ máu. Giảm mỡ động vật, đồ chiên rán và tăng rau, cá.",
+    "breast_cancer": "Nói với bác sĩ về tiền sử này và hỏi về lịch tầm soát vú phù hợp.",
+    "colorectal_cancer": "Nói với bác sĩ về tiền sử này và hỏi có nên tầm soát đại trực tràng sớm hơn thông thường không.",
+}
+DIAGNOSED_ADVICE = "Theo dõi và dùng thuốc theo hướng dẫn của bác sĩ. Ghi chỉ số đều đặn ở trang Hôm nay."
+BREAST_CANCER_MALE = "Nói với bác sĩ về tiền sử này. Nam giới ít gặp bệnh này hơn nhưng vẫn nên biết để báo khi đi khám."
+
+
+def family_risk(account: AccountProfile) -> list[dict]:
+    """Family-history level per condition, from who is affected and how closely related they are.
+
+    Rules follow common family-history stratification: a parent or sibling counts more than a
+    grandparent, two close relatives more than one, and two generations more than one.
+    ponytail: no age at diagnosis and no sex-specific rules; add both if the form starts collecting onset age.
+    """
+    members = account.family_history
+    close_unknown = sum(1 for m in members if m.relation in F1_RELATIONS and m.knowledge == "unknown")
+    result = []
+    for condition in CONDITION_WEIGHTS:
+        affected = [m for m in members if condition in m.conditions]
+        first = sum(m.affected_count if m.relation == "sibling" else 1 for m in affected if m.relation in F1_RELATIONS)
+        grand_by_side: dict[str, int] = {}
+        for m in affected:
+            if m.relation not in F1_RELATIONS:
+                grand_by_side[m.side] = grand_by_side.get(m.side, 0) + 1
+        grand = sum(grand_by_side.values())
+        if condition in account.profile.known_conditions:
+            level = "diagnosed"
+        elif first >= 2 or (first == 1 and grand >= 1):
+            level = "very_high"
+        elif first == 1 or max(grand_by_side.values(), default=0) >= 2:
+            level = "high"
+        elif grand >= 1:
+            level = "moderate"
+        elif close_unknown or len(members) < 3:
+            # Nobody known to be affected, but a parent or the siblings are still unknown: that is not a clean history.
+            level = "unknown"
+        else:
+            level = "none"
+        result.append({"condition": condition, "level": level,
+                       "relatives": [m.member_id or m.relation for m in affected],
+                       "sibling_count": next((m.affected_count for m in affected if m.relation == "sibling"), 0),
+                       "advice": DIAGNOSED_ADVICE if level == "diagnosed"
+                       else "" if level in {"unknown", "none"}
+                       else BREAST_CANCER_MALE if condition == "breast_cancer" and account.profile.sex == "male"
+                       else FAMILY_ADVICE[condition]})
+    return result
+
+
+def risk_overview(account: AccountProfile, vital_score: float | None) -> dict:
+    """Live family and body scores from the current profile, fused with the latest reading's vital score."""
+    payload = AssessmentCreate(profile=account.profile, family_history=account.family_history, vitals={})
+    pgrs, brs = calculate_pgrs(payload), calculate_brs(payload)
+    return {"scores": {"pgrs": pgrs, "brs": brs, "vitals": vital_score,
+                       "overall": None if vital_score is None else fuse(pgrs, brs, vital_score)},
+            "relatives_unknown": sum(1 for m in account.family_history if m.knowledge == "unknown"),
+            "relatives_total": len(account.family_history),
+            "conditions": family_risk(account)}
+
+
 @dataclass
 class RiskCalculation:
     result: AssessmentResult
@@ -246,9 +324,7 @@ def calculate_risk(payload: AssessmentCreate) -> RiskCalculation:
     brs = calculate_brs(payload)
     vitals = calculate_vital_score(payload)
 
-    # Multiplicative three-layer fusion. Each layer amplifies the others.
-    multiplicative = ((1 + pgrs / 100) * (1 + brs / 100) * (1 + vitals / 100) - 1) / 7 * 100
-    overall = round(clamp(multiplicative), 1)
+    overall = fuse(pgrs, brs, vitals)
 
     attention_threshold = round(max(22, 40 - pgrs * 0.12), 1)
     alert_threshold = round(max(45, 70 - pgrs * 0.16), 1)
