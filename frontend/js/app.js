@@ -992,8 +992,13 @@ async function saveMeasurement(values, source, samples = []) {
     // The new reading was scored against the current profile, so its scores are the live ones.
     if (state.risk) state.risk.scores = r.scores;
     renderDashboard(); renderHistory(); navigate("dashboard");
-    if (isEmergency(r)) $("#emergency-title").focus();
-    else toast("Đã lưu chỉ số.");
+    if (isEmergency(r)) {
+      // Focus can move only after the dialog has really closed: while it is open the page behind it is inert,
+      // and on closing the browser hands focus back to the button that opened it, which is now hidden.
+      const dialog = $("#measurement-dialog");
+      const focusTitle = () => $("#emergency-title").focus();
+      if (dialog.open) dialog.addEventListener("close", focusTitle, { once: true }); else focusTitle();
+    } else toast("Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
   finally { state.busy = false; button.disabled = false; button.innerHTML = original; if (source !== "manual") renderDevice(); }
 }
