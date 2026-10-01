@@ -102,10 +102,9 @@ async def list_links(user: User = Depends(current_user), session: AsyncSession =
             patient = await session.get(User, link.patient_id)
             rows = list(await session.scalars(select(Assessment).where(Assessment.user_id == patient.id)
                                               .order_by(Assessment.created_at.desc()).limit(30)))
-            real = [row for row in rows if row.vitals.get("source") != "simulation"]
-            danger = next((row for row in real if _aware(row.created_at) >= since
+            danger = next((row for row in rows if _aware(row.created_at) >= since
                            and any(alert.get("severity") == "alert" for alert in row.result.get("alerts", []))), None)
-            latest = real[0] if real else None
+            latest = rows[0] if rows else None
             patients.append({
                 "link_id": link.id, "patient_id": patient.id, "display_name": patient.display_name,
                 "latest": latest and {"created_at": latest.created_at, "risk_level": latest.risk_level, "vitals": latest.vitals},
