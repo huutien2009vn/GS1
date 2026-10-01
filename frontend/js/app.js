@@ -326,7 +326,7 @@ function renderDashboard() {
   status.className = "status-word " + ({ emergency: "alert", watch: "attention" }[level] || level);
   status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
   $("#risk-summary").textContent = !r ? "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên." : level === "emergency" ? SUMMARY_FALLBACK.emergency : level === "watch" ? "Lần đo mới nhất đã trở lại ngưỡng an toàn, nhưng trong 24 giờ qua có lần đo ở mức nguy hiểm." : r.insight.summary || SUMMARY_FALLBACK[level];
-  $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() + (r.measurement_source === "simulation" ? " (không phải dữ liệu thật)" : "") : "";
+  $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() : "";
   // While the emergency panel is up it is the only call to action; the score would read as reassurance.
   $("#score-details").classList.toggle("hidden", !r || level === "emergency");
   $("#new-measurement").classList.toggle("hidden", level === "emergency");
@@ -337,15 +337,14 @@ function renderDashboard() {
     $("#risk-score").textContent = Math.round(r.scores.overall);
     ["pgrs", "brs", "vital"].forEach(key => { $("#" + key + "-score").textContent = Math.round(r.scores[key === "vital" ? "vitals" : key]); });
   }
-  const hiddenSims = r && isReal({ vitals: { source: r.measurement_source } }) && state.records.some(row => !isReal(row));
-  $("#measurement-context").textContent = r ? (hiddenSims ? "Không tính dữ liệu mẫu" : "") : "";
   renderMetrics();
   renderTips();
 }
 function renderTrends() {
   const source = state.result?.measurement_source;
-  const rows = state.records.filter(row => (row.vitals.source || "manual") === source).slice(0, 30).reverse();
-  $("#chart-context").textContent = source ? (source === "simulation" ? "Dữ liệu mẫu" : "Số đo của bạn, tối đa 30 lần gần nhất") : "";
+  // Every source shares one chart: typed-in, Bluetooth and sample readings.
+  const rows = state.records.slice(0, 30).reverse();
+  $("#chart-context").textContent = source ? "Tối đa 30 lần đo gần nhất" : "";
   for (const [id, spec] of Object.entries(TRENDS)) {
     const card = $('[data-trend="' + id + '"]');
     const points = rows.filter(row => spec.series.every(([key]) => row.vitals[key] != null));
@@ -364,7 +363,7 @@ function renderTrends() {
   }
 }
 function pickCurrent(rows) {
-  return rows.find(isReal) || rows[0] || null;
+  return rows[0] || null;
 }
 async function refreshRecords() {
   const epoch = state.authEpoch;
@@ -385,7 +384,7 @@ async function refreshRecords() {
 }
 function recentEmergency() {
   const since = Date.now() - 24 * 60 * 60 * 1000;
-  return state.records.find(row => isReal(row) && recordLevel(row) === "emergency" && toDate(row.created_at).getTime() >= since) || null;
+  return state.records.find(row => recordLevel(row) === "emergency" && toDate(row.created_at).getTime() >= since) || null;
 }
 function recordLevel(record) {
   const v = record.vitals || {};
@@ -463,7 +462,7 @@ function renderProfile() {
     '<article class="panel"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.viewing ? "Hồ sơ được chia sẻ, chỉ xem" : state.user.email || "Hồ sơ mẫu") + '</p>' +
     '<dl class="facts facts-2col">' +
       "<div><dt>Tuổi</dt><dd>" + p.age + "</dd></div><div><dt>Giới tính</dt><dd>" + sex + "</dd></div>" +
-      "<div><dt>Chiều cao</dt><dd>" + p.height_cm + " cm</dd></div><div><dt>Cân nặng</dt><dd>" + p.weight_kg + " kg</dd></div>" +
+      "<div><dt>Chiều cao</dt><dd>" + num(p.height_cm) + " cm</dd></div><div><dt>Cân nặng</dt><dd>" + num(p.weight_kg) + " kg</dd></div>" +
       "<div><dt>BMI</dt><dd>" + num(bmi) + ' <span class="fact-note">' + bmiLabel(bmi) + "</span></dd></div><div><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd></div>" +
       "<div><dt>Bệnh đã chẩn đoán</dt><dd>" + esc(conditions.join(", ") || "Không khai báo") + "</dd></div><div><dt>Hút thuốc</dt><dd>" + (p.smoker ? "Có" : "Không") + "</dd></div>" +
       (state.viewing ? "" : "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>") +
@@ -482,15 +481,17 @@ function renderProfile() {
     notes.map(([title, text]) => "<h3>Ghi chú " + title.toLowerCase() + "</h3><p>" + esc(text) + "</p>").join("") + "</article>";
 }
 
-// Doctor's report: an A4 page built from the user's own real readings, saved as PDF through the print dialog.
+// Doctor's report: an A4 page built from the user's readings, saved as PDF through the print dialog.
 // ponytail: uses the readings already loaded (latest 100); add a date-range API if longer histories matter.
 const reportCharts = {};
-function reportRows(days, withSample = false) {
+function reportRows(days) {
   const since = Date.now() - days * 86400000;
-  return state.records.filter(row => (withSample || isReal(row)) && toDate(row.created_at).getTime() >= since).reverse();
+  return state.records.filter(row => toDate(row.created_at).getTime() >= since).reverse();
 }
 function reportSummary(rows) {
-  const stat = (values, digits = 0) => values.length ? { n: values.length, avg: num(Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(digits))), min: num(Math.min(...values)), max: num(Math.max(...values)) } : null;
+  // Same rounding as the readings table below, so the lowest and highest values can be found in it.
+  const fix = (value, digits) => num(Number(value.toFixed(digits)));
+  const stat = (values, digits = 0) => values.length ? { n: values.length, avg: fix(values.reduce((a, b) => a + b, 0) / values.length, digits), min: fix(Math.min(...values), digits), max: fix(Math.max(...values), digits) } : null;
   const flagged = key => rows.filter(row => ["attention", "alert"].includes(statusOf(key, row.vitals)[0])).length;
   const bp = rows.filter(row => row.vitals.systolic != null && row.vitals.diastolic != null);
   const sys = stat(bp.map(row => row.vitals.systolic)), dia = stat(bp.map(row => row.vitals.diastolic));
@@ -504,10 +505,10 @@ function reportSummary(rows) {
 }
 function renderReport() {
   const days = Number($("#report-days").value);
-  const withSample = $("#report-sample").checked;
-  const rows = reportRows(days, withSample);
-  const samples = rows.filter(row => !isReal(row)).length;
-  const hasSample = state.records.some(row => !isReal(row));
+  const rows = reportRows(days);
+  // Only the latest 100 readings are loaded; say so when the period reaches further back than they do.
+  const oldest = state.records.length >= 100 ? toDate(state.records.at(-1).created_at) : null;
+  const cut = oldest && oldest.getTime() > Date.now() - days * 86400000;
   const h = state.health, p = h.profile, now = new Date();
   const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const pad = n => String(n).padStart(2, "0");
@@ -525,7 +526,7 @@ function renderReport() {
   $("#report-sheet").innerHTML =
     '<header class="report-head"><div><strong>GeneSense</strong><br>Ứng dụng theo dõi sức khỏe tại nhà</div><div class="report-meta">Mã phiếu: ' + code + "<br>Ngày lập: " + esc(date(now.toISOString(), false)) + "</div></header>" +
     '<h1 id="report-title">PHIẾU TỔNG HỢP CHỈ SỐ SỨC KHỎE TẠI NHÀ</h1><p class="report-period">Kỳ báo cáo: ' + days + " ngày, đến ngày " + esc(date(now.toISOString(), false)) + '</p><p class="report-notice">' + notice + "</p>" +
-    (samples ? '<p class="report-notice">Phiếu này có ' + samples + " số đo là dữ liệu mẫu để dùng thử, không phải số đo thật. Các số đo này được ghi “Dữ liệu mẫu” ở cột Nguồn và có tính vào bảng tổng hợp, biểu đồ.</p>" : "") +
+    (cut ? '<p class="report-notice">Phiếu chỉ gồm 100 lần đo gần nhất, từ ' + esc(date(oldest.toISOString())) + ". Các lần đo cũ hơn trong kỳ không có trong phiếu.</p>" : "") +
     "<h2>I. Thông tin người dùng</h2>" +
     '<table class="report-table report-info"><tbody><tr><th>Họ tên</th><td>' + esc(h.display_name) + "</td><th>Tuổi</th><td>" + p.age + "</td><th>Giới tính</th><td>" + sex + "</td></tr>" +
     "<tr><th>Chiều cao</th><td>" + num(p.height_cm) + " cm</td><th>Cân nặng</th><td>" + num(p.weight_kg) + " kg</td><th>BMI</th><td>" + num(bmi) + " (" + bmiLabel(bmi) + ")</td></tr>" +
@@ -534,7 +535,7 @@ function renderReport() {
     "<h2>II. Tiền sử bệnh trong gia đình</h2>" +
     '<table class="report-table"><thead><tr><th>Người thân</th><th>Bệnh đã biết</th></tr></thead><tbody>' + family + "</tbody></table>" +
     "<h2>III. Tổng hợp trong kỳ</h2>" +
-    (rows.length ? '<table class="report-table report-num"><thead><tr><th>Chỉ số</th><th>Đơn vị</th><th>Số lần đo</th><th>Trung bình</th><th>Thấp nhất</th><th>Cao nhất</th><th>Số lần ngoài ngưỡng</th></tr></thead><tbody>' + reportSummary(rows) + "</tbody></table>" : "<p>Không có số đo trong kỳ này." + (hasSample && !withSample ? " Dữ liệu mẫu chưa được đưa vào phiếu. Chọn “Gồm dữ liệu mẫu” để thêm." : "") + "</p>") +
+    (rows.length ? '<table class="report-table report-num"><thead><tr><th>Chỉ số</th><th>Đơn vị</th><th>Số lần đo</th><th>Trung bình</th><th>Thấp nhất</th><th>Cao nhất</th><th>Số lần ngoài ngưỡng</th></tr></thead><tbody>' + reportSummary(rows) + "</tbody></table>" : "<p>Không có số đo trong kỳ này.</p>") +
     (rows.length ? "<h2>IV. Biểu đồ diễn biến</h2><div class=\"report-charts\">" + Object.keys(TRENDS).map(id => '<figure data-report-chart="' + id + '"><figcaption></figcaption><div class="trend-chart"></div></figure>').join("") + '</div><p class="report-small">Đường liền: tâm thu hoặc chỉ số chính. Đường đứt: tâm trương. Nền xám hoặc đường chấm: ngưỡng tham khảo.</p>' +
       "<h2>V. Bảng số đo chi tiết</h2>" +
       '<table class="report-table report-num"><thead><tr><th>Thời gian</th><th>Huyết áp (mmHg)</th><th>Nhịp tim (lần/phút)</th><th>SpO₂ (%)</th><th>Đường huyết (mg/dL)</th><th>Nguồn</th><th>Ghi chú</th></tr></thead><tbody>' +
@@ -552,13 +553,7 @@ function renderReport() {
       series: spec.series.map(([key, label], index) => ({ label, color: "#000", dash: index ? "6 4" : "", values: points.map(row => row.vitals[key]) })) });
   }
 }
-function openReport() {
-  screen("report"); document.title = "Phiếu tổng hợp - GeneSense";
-  // Sample readings stay out of the sheet unless asked for; they are on by default only when there is nothing real to show.
-  $("#report-sample-option").classList.toggle("hidden", !state.records.some(row => !isReal(row)));
-  $("#report-sample").checked = state.records.length > 0 && !state.records.some(isReal);
-  renderReport();
-}
+function openReport() { screen("report"); document.title = "Phiếu tổng hợp - GeneSense"; renderReport(); }
 
 // Family sharing. While viewing a relative, the same screens render that person's data read-only:
 // state is swapped, writes are hidden (.own-only) and guarded, and reads go through the care endpoints.
@@ -884,7 +879,7 @@ function startSimulation() {
   simulator.addEventListener("data", event => ingest(event.detail, epoch));
   simulator.start();
   $("#device-name").textContent = "Dữ liệu mẫu";
-  $("#device-message").textContent = "Chỉ số được tạo tự động để dùng thử, không phải số đo thật. Lần đo mẫu không thay đổi tình trạng trên trang Hôm nay.";
+  $("#device-message").textContent = "Chỉ số được tạo tự động để dùng thử, không phải số đo thật.";
   $("#disconnect-device").classList.remove("hidden");
   freshnessTimer = setInterval(renderDevice, 3000);
 }
@@ -903,16 +898,14 @@ async function saveMeasurement(values, source, samples = []) {
     const r = await api.assess({ vitals: { ...values, timestamp: new Date().toISOString() }, source, samples });
     if (epoch !== state.authEpoch) return;
     const record = { id: r.id, created_at: r.created_at, risk_level: r.risk_level, overall_score: r.scores.overall, vitals: { ...values, source } };
-    state.records = [record, ...state.records].slice(0, 30);
-    // Simulated data never replaces a real reading as the current status.
-    if (isReal(record) || !state.records.some(isReal)) state.result = r;
+    state.records = [record, ...state.records].slice(0, 100);
+    state.result = r;
     closeDialog($("#measurement-dialog"));
     $("#measurement-form").reset();
     stopStreams();
     renderDashboard(); renderHistory(); navigate("dashboard");
-    if (isEmergency(r) && state.result?.id === r.id) $("#emergency-title").focus();
-    if (state.result?.id !== r.id) toast("Đã lưu lần đo mẫu vào Lịch sử đo. Tình trạng hôm nay vẫn theo số đo của bạn.");
-    else if (!isEmergency(r)) toast("Đã lưu chỉ số.");
+    if (isEmergency(r)) $("#emergency-title").focus();
+    else toast("Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
   finally { state.busy = false; button.disabled = false; button.innerHTML = original; if (source !== "manual") renderDevice(); }
 }
@@ -929,6 +922,7 @@ function clearAccount() {
   stopStreams();
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   state.viewing = null; state.own = null; state.care = { patients: [], caregivers: [] }; document.body.classList.remove("viewing");
+  $("#viewing-banner").classList.add("hidden"); $("#viewing-text").textContent = "";
   state.user = null; state.health = null; state.records = []; state.result = null; state.medicalRecords = []; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
@@ -1050,7 +1044,6 @@ function bindEvents() {
   $("#refresh-history").addEventListener("click", refreshRecords);
   $("#open-report").addEventListener("click", openReport);
   $("#report-days").addEventListener("change", renderReport);
-  $("#report-sample").addEventListener("change", renderReport);
   $("#report-print").addEventListener("click", () => window.print());
   $("#report-back").addEventListener("click", () => { screen("app"); navigate("history"); });
   $("#history-filter").addEventListener("change", renderHistory);
