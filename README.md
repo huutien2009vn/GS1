@@ -197,7 +197,7 @@ Các API thay đổi dữ liệu yêu cầu cookie phiên cùng header `X-Reques
 
 ## Ảnh minh họa
 
-Ảnh trong `frontend/assets/tips/` lấy từ [Pexels](https://www.pexels.com/license/) (miễn phí, không bắt buộc ghi nguồn) và được lưu cùng ứng dụng để không gửi yêu cầu ra bên thứ ba: 54326, 7129126, 8088865, 17072088, 30834708, 34889040, 10894046.
+Ảnh trong `frontend/assets/tips/` lấy từ [Pexels](https://www.pexels.com/license/) (miễn phí, không bắt buộc ghi nguồn) và được lưu cùng ứng dụng để không gửi yêu cầu ra bên thứ ba: 54326, 7129126, 8088865, 17072088, 30834708, 34889040, 10894046, 34199673, 3771069, 6648542, 7580256, 6520070, 11643228, 13637225.
 
 ## Kiểm thử
 

@@ -50,3 +50,26 @@ def test_high_pgrs_lowers_alert_threshold():
     ]
     elevated = calculate_risk(payload).result
     assert elevated.thresholds.alert < baseline.thresholds.alert
+
+
+def test_tips_quote_the_reading_that_triggered_them():
+    titles = lambda result: [tip.title for tip in result.insight.tips]
+    healthy = calculate_risk(make_payload()).result
+    assert titles(healthy) == ["Duy trì nhịp theo dõi"]
+
+    high_bp = calculate_risk(make_payload(systolic=152, diastolic=96)).result
+    assert titles(high_bp)[:2] == ["Đo huyết áp đúng tư thế", "Ăn nhạt hơn"]
+    assert "152/96 mmHg" in high_bp.insight.tips[0].reason
+
+    low_spo2 = calculate_risk(make_payload(spo2=93.5)).result
+    assert "93,5%" in low_spo2.insight.tips[0].reason
+
+    low_glucose = calculate_risk(make_payload(glucose=62)).result
+    assert titles(low_glucose)[0] == "Xử trí khi đường huyết thấp"
+
+
+def test_tips_use_family_history_when_a_vital_is_missing():
+    payload = make_payload(glucose=None)
+    payload.family_history = [FamilyHistoryInput(relation="mother", conditions=["diabetes"], knowledge="known")]
+    result = calculate_risk(payload).result
+    assert "Đo đường huyết trong lần tới" in [tip.title for tip in result.insight.tips]

@@ -98,7 +98,7 @@
         <div class="page-heading"><div><h1 id="greeting">Xin chào</h1><p id="today-date" class="lead"></p></div></div>
 
         <div id="emergency-panel" class="emergency hidden" role="alert">
-          <h2 id="emergency-title">Chỉ số ở mức nguy hiểm</h2>
+          <h2 id="emergency-title" tabindex="-1">Chỉ số ở mức nguy hiểm</h2>
           <ul id="emergency-list"></ul>
           <p>Nếu có đau ngực, khó thở, lú lẫn, yếu liệt hoặc choáng: gọi cấp cứu ngay.</p>
           <p>Nếu không có triệu chứng: ngồi nghỉ 5 phút rồi đo lại. Nếu vẫn ở mức nguy hiểm, liên hệ bác sĩ ngay trong hôm nay.</p>
@@ -107,8 +107,8 @@
 
         <article id="status-panel" class="panel status-panel">
           <p class="status-label">Tình trạng theo số đo gần nhất của bạn</p>
-          <p id="risk-status" class="status-word neutral">Chưa có dữ liệu</p>
-          <p id="risk-summary" class="status-summary">Nhập chỉ số từ máy đo để xem đánh giá đầu tiên.</p>
+          <p id="risk-status" class="status-word neutral">Đang tải…</p>
+          <p id="risk-summary" class="status-summary"></p>
           <p id="result-date" class="note"></p>
           <p id="recent-emergency" class="inline-message warning hidden"></p>
           <div id="result-alerts" class="result-alerts" aria-live="polite"></div>
@@ -129,7 +129,7 @@
       <section id="history-view" class="view hidden">
         <div class="page-heading"><h1>Lịch sử đo</h1><button class="btn outline" id="refresh-history">Tải lại</button></div>
         <section class="section advice" aria-labelledby="advice-title">
-          <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2><p class="note">Dựa trên hồ sơ và lần đo gần nhất</p></div>
+          <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2></div>
           <div id="tip-list" class="tip-grid"></div>
           <p id="follow-up" class="follow-up hidden"></p>
         </section>
@@ -160,7 +160,7 @@
 
       <p class="legal-note">GeneSense hỗ trợ theo dõi sức khỏe, không phải thiết bị y tế và không thay thế chẩn đoán của bác sĩ. Khi có dấu hiệu cấp cứu, gọi 115.</p>
     </main>
-    <nav class="mobile-nav" aria-label="Điều hướng"><button data-nav="dashboard"><span data-icon="grid"></span>Hôm nay</button><button data-nav="history"><span data-icon="history"></span>Lịch sử</button><button data-nav="records"><span data-icon="document"></span>Giấy tờ</button><button data-nav="profile"><span data-icon="family"></span>Hồ sơ</button></nav>
+    <nav class="mobile-nav" aria-label="Điều hướng"><button data-nav="dashboard"><span data-icon="grid"></span>Hôm nay</button><button data-nav="history"><span data-icon="history"></span>Lịch sử đo</button><button data-nav="records"><span data-icon="document"></span>Giấy tờ</button><button data-nav="profile"><span data-icon="family"></span>Hồ sơ</button></nav>
   </div>
 
   <dialog id="measurement-dialog"><div class="dialog-heading"><h2>Ghi chỉ số</h2><button class="icon-button" data-close="measurement-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
@@ -177,6 +177,7 @@
     </div>
     <div id="review-stage" class="hidden"><h3>Kiểm tra trước khi lưu</h3><p class="note">Nội dung do AI đọc có thể sai. Hãy đối chiếu với giấy tờ gốc.</p><div id="document-analysis-preview"></div><label class="check-label confirm-record"><input id="confirm-medical-record" type="checkbox"><span>Tôi đã kiểm tra và muốn lưu nội dung này.</span></label><p id="record-save-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions"><button id="analyze-another" class="btn outline">Chọn ảnh khác</button><button id="save-medical-record" class="btn primary" disabled>Lưu vào hồ sơ</button></div></div>
   </dialog>
+  <dialog id="confirm-dialog" class="confirm-dialog"><form method="dialog"><h2 id="confirm-title">Xóa?</h2><p>Không thể khôi phục sau khi xóa.</p><div class="dialog-actions"><button class="btn outline" value="no">Hủy</button><button class="btn danger" value="yes">Xóa</button></div></form></dialog>
   <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
   <noscript>Vui lòng bật JavaScript để sử dụng GeneSense.</noscript>
   <script type="module" src="/js/app.js"></script>

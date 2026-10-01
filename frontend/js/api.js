@@ -29,7 +29,7 @@ export const api = {
   profile: () => request("/api/profile"),
   saveProfile: body => request("/api/profile", { method: "PUT", body: JSON.stringify(body) }),
   assess: body => request("/api/assessments", { method: "POST", body: JSON.stringify(body) }),
-  history: (limit = 30) => request(`/api/assessments?limit=${limit}`),
+  history: (limit = 100) => request(`/api/assessments?limit=${limit}`),
   assessment: id => request(`/api/assessments/${encodeURIComponent(id)}`),
   deleteAssessment: id => request(`/api/assessments/${encodeURIComponent(id)}`, { method: "DELETE" }),
   feedback: body => request("/api/feedback", { method: "POST", body: JSON.stringify(body) }),
