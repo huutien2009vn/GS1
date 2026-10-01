@@ -263,13 +263,26 @@ const tipImage = tip => {
   const text = (tip.title + " " + tip.action).toLowerCase();
   return "/assets/tips/" + (TIP_IMAGES.find(([pattern]) => pattern.test(text))?.[1] || "routine") + ".jpg";
 };
+// One general habit per calendar day, the same for the whole day and independent of readings.
+const DAILY_TIPS = [
+  { title: "Uống đủ nước", action: "Uống khoảng 6 đến 8 cốc nước trong ngày, chia đều từ sáng đến tối.", reason: "Nếu bác sĩ dặn hạn chế nước (bệnh tim, thận), hãy theo lời dặn đó.", image: "routine" },
+  { title: "Ngủ đủ giấc", action: "Đi ngủ trước 23 giờ và ngủ 7 đến 8 tiếng.", reason: "Thiếu ngủ làm huyết áp và đường huyết khó ổn định.", image: "routine" },
+  { title: "Thêm rau vào bữa ăn", action: "Ăn một bát rau xanh trong bữa trưa và bữa tối.", reason: "Rau giúp no lâu và giảm lượng muối, tinh bột trong bữa.", image: "diet" },
+  { title: "Đi bộ sau bữa ăn", action: "Đi bộ nhẹ 10 phút sau bữa tối.", reason: "Vận động nhẹ sau ăn giúp đường huyết lên chậm hơn.", image: "activity" },
+  { title: "Nêm nhạt hơn một chút", action: "Bớt nửa thìa nước mắm hoặc muối khi nấu hôm nay.", reason: "Ăn nhạt dần giúp kiểm soát huyết áp.", image: "diet" },
+  { title: "Hít thở chậm", action: "Ngồi yên, hít vào 4 giây, thở ra 6 giây, trong 5 phút.", reason: "Thở chậm giúp cơ thể thư giãn trước khi đo chỉ số.", image: "routine" },
+  { title: "Hỏi thăm người thân", action: "Gọi cho bố mẹ hoặc anh chị em và hỏi thêm về sức khỏe trong gia đình.", reason: "Tiền sử gia đình càng rõ, đánh giá càng sát.", image: "family" },
+];
+const dailyTip = () => DAILY_TIPS[Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000) % DAILY_TIPS.length];
+const tipCard = (tip, image, label = "") => '<article class="tip-card' + (label ? " daily" : "") + '"><img src="' + image + '" alt="" width="160" height="160" loading="lazy" decoding="async"><div>' + (label ? '<p class="tip-label">' + label + "</p>" : "") + "<h3>" + esc(tip.title) + "</h3><p>" + esc(tip.action) + "</p>" + (tip.reason ? '<p class="note">' + esc(tip.reason) + "</p>" : "") + "</div></article>";
 function renderTips() {
   const tips = state.result?.insight.tips || [
     { title: "Bắt đầu với một chỉ số", action: "Có thể chỉ nhập huyết áp hoặc nhịp tim. Không cần đủ tất cả chỉ số." },
     { title: "Đo trong cùng điều kiện", action: "Ngồi nghỉ 5 phút trước khi đo và làm theo hướng dẫn của máy đo." },
     { title: "Hỏi thêm người thân", action: "Nếu chưa rõ tiền sử bệnh trong gia đình, hãy hỏi bố mẹ rồi cập nhật hồ sơ." },
   ];
-  $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => '<article class="tip-card"><img src="' + tipImage(tip) + '" alt="" width="160" height="160" loading="lazy" decoding="async"><div><h3>' + esc(tip.title) + "</h3><p>" + esc(tip.action) + "</p>" + (tip.reason ? '<p class="note">' + esc(tip.reason) + "</p>" : "") + "</div></article>").join("");
+  const daily = dailyTip();
+  $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => tipCard(tip, tipImage(tip))).join("") + tipCard(daily, "/assets/tips/" + daily.image + ".jpg", "Gợi ý hôm nay");
   // During the 24h watch window the stored "all fine" follow-up would contradict Today.
   const followUp = state.result && !isEmergency(state.result) && recentEmergency() ? "" : state.result?.insight.follow_up || "";
   $("#follow-up").textContent = followUp;

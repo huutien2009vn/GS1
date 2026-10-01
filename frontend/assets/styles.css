@@ -224,6 +224,8 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .tip-card h3 { margin: 2px 0 6px; }
 .tip-card p { margin: 0 0 6px; }
 .tip-card .note { margin: 0; }
+.tip-card.daily { background: var(--blue-soft); border-color: #c5d8ef; }
+.tip-label { margin: 0; font-size: .889rem; font-weight: 600; color: var(--blue); }
 .follow-up { max-width: none; margin: 16px 0 0; padding: 12px 16px; border-radius: var(--radius); background: var(--blue-soft); color: var(--ink); }
 
 /* Records */
