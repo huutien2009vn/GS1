@@ -192,6 +192,12 @@ Model khả dụng phụ thuộc tài khoản Google AI Studio. Nếu Google tha
 | `POST` | `/api/medical-records/analyze` | Phân tích ảnh trong bộ nhớ, chưa lưu |
 | `GET/POST` | `/api/medical-records` | Xem hoặc lưu JSON đã xác nhận |
 | `DELETE` | `/api/medical-records/{id}` | Xóa bản ghi thuộc tài khoản |
+| `POST` | `/api/care/invites` | Tạo mã chia sẻ dùng một lần (24 giờ) |
+| `POST` | `/api/care/links` | Nhập mã để theo dõi người thân (chỉ xem) |
+| `GET` | `/api/care/links` | Danh sách người thân đang theo dõi và người đang xem hồ sơ của tôi |
+| `DELETE` | `/api/care/links/{id}` | Thu hồi hoặc ngừng theo dõi |
+| `GET` | `/api/care/patients/{id}/profile` | Hồ sơ và tiền sử gia đình của người thân đã liên kết |
+| `GET` | `/api/care/patients/{id}/assessments` | Số đo của người thân đã liên kết |
 
 Các API thay đổi dữ liệu yêu cầu cookie phiên cùng header `X-Requested-With`; dữ liệu được giới hạn theo `user_id` ở backend.
 
