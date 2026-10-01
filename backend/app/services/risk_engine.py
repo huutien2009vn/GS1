@@ -250,11 +250,13 @@ FAMILY_ADVICE = {
     "hypertension": "Đo huyết áp tại nhà đều đặn và ghi lại. Ăn nhạt hơn và nói với bác sĩ về tiền sử gia đình này.",
     "diabetes": "Hỏi bác sĩ về xét nghiệm đường huyết định kỳ. Giữ cân nặng và giảm đồ ngọt, tinh bột trắng.",
     "cardiovascular": "Hỏi bác sĩ về kiểm tra huyết áp, mỡ máu và đường huyết. Không hút thuốc và vận động đều.",
-    "stroke": "Giữ huyết áp ổn định. Nếu méo miệng, yếu tay chân hoặc nói khó xuất hiện đột ngột, gọi cấp cứu 115 ngay.",
+    "stroke": "Giữ huyết áp ổn định. Nên biết dấu hiệu đột quỵ: méo miệng, yếu tay chân, nói khó xuất hiện đột ngột. Khi thấy, gọi cấp cứu 115.",
     "dyslipidemia": "Hỏi bác sĩ về xét nghiệm mỡ máu. Giảm mỡ động vật, đồ chiên rán và tăng rau, cá.",
-    "breast_cancer": "Nói với bác sĩ về tiền sử này và hỏi về lịch tầm soát vú phù hợp, nhất là với nữ.",
+    "breast_cancer": "Nói với bác sĩ về tiền sử này và hỏi về lịch tầm soát vú phù hợp.",
     "colorectal_cancer": "Nói với bác sĩ về tiền sử này và hỏi có nên tầm soát đại trực tràng sớm hơn thông thường không.",
 }
+DIAGNOSED_ADVICE = "Theo dõi và dùng thuốc theo hướng dẫn của bác sĩ. Ghi chỉ số đều đặn ở trang Hôm nay."
+BREAST_CANCER_MALE = "Nói với bác sĩ về tiền sử này. Nam giới ít gặp bệnh này hơn nhưng vẫn nên biết để báo khi đi khám."
 
 
 def family_risk(account: AccountProfile) -> list[dict]:
@@ -291,7 +293,10 @@ def family_risk(account: AccountProfile) -> list[dict]:
         result.append({"condition": condition, "level": level,
                        "relatives": [m.member_id or m.relation for m in affected],
                        "sibling_count": next((m.affected_count for m in affected if m.relation == "sibling"), 0),
-                       "advice": FAMILY_ADVICE[condition] if level in {"very_high", "high", "moderate"} else ""})
+                       "advice": DIAGNOSED_ADVICE if level == "diagnosed"
+                       else "" if level in {"unknown", "none"}
+                       else BREAST_CANCER_MALE if condition == "breast_cancer" and account.profile.sex == "male"
+                       else FAMILY_ADVICE[condition]})
     return result
 
 
