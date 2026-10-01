@@ -322,6 +322,8 @@ def test_care_link_grants_read_only_access_until_revoked(client):
     assert client.get(base + "/assessments/" + reading_id).status_code == 200
     shared = client.get(base + "/profile").json()["health"]
     assert set(shared) == {"display_name", "profile", "family_history"}
+    risk = client.get(base + "/risk").json()
+    assert risk["scores"]["vitals"] is not None and len(risk["conditions"]) == 7
     listed = client.get("/api/care/links").json()
     assert listed["patients"][0]["latest"]["risk_level"] == "safe" and listed["caregivers"] == []
     # Read-only: the caregiver cannot delete or reach the patient's own-account routes.
@@ -335,6 +337,8 @@ def test_care_link_grants_read_only_access_until_revoked(client):
     _as(client, caregiver_cookie)
     assert client.get(base + "/assessments").status_code == 404  # revoked at once
     assert client.get(base + "/profile").status_code == 404
+    assert client.get(base + "/risk").status_code == 404
+    assert client.get("/api/risk").json()["scores"]["vitals"] is None  # the caregiver has no reading of their own
 
 
 def test_care_invite_expiry_replacement_and_rate_limit(client):

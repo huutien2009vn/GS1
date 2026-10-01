@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
-Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke"]
+Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer"]
 Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother"]
 
 
@@ -29,6 +29,8 @@ class FamilyHistoryInput(BaseModel):
     member_id: str | None = None
     side: Literal["immediate", "paternal", "maternal"] = "immediate"
     knowledge: Literal["unknown", "none", "known"] = "unknown"
+    # How many people this entry stands for; only the "siblings" entry uses more than one.
+    affected_count: int = Field(default=1, ge=1, le=10)
 
     @model_validator(mode="after")
     def consistent_history(self):

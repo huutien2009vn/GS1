@@ -73,3 +73,49 @@ def test_tips_use_family_history_when_a_vital_is_missing():
     payload.family_history = [FamilyHistoryInput(relation="mother", conditions=["diabetes"], knowledge="known")]
     result = calculate_risk(payload).result
     assert "Đo đường huyết trong lần tới" in [tip.title for tip in result.insight.tips]
+
+
+def _account(family, known=()):
+    from backend.app.schemas import AccountProfile
+    return AccountProfile.model_validate({
+        "display_name": "Test", "health_consent": True,
+        "profile": {"age": 40, "sex": "male", "height_cm": 170, "weight_kg": 60, "activity_minutes_week": 150,
+                    "known_conditions": list(known)},
+        "family_history": family,
+    })
+
+
+def _member(member_id, relation, side, conditions=(), knowledge=None, count=1):
+    return {"member_id": member_id, "relation": relation, "side": side, "conditions": list(conditions),
+            "knowledge": knowledge or ("known" if conditions else "none"), "affected_count": count}
+
+
+def test_family_risk_levels_follow_closeness_and_number_of_relatives():
+    from backend.app.services.risk_engine import family_risk, risk_overview
+    family = [
+        _member("father", "father", "immediate", ["hypertension", "diabetes"]),
+        _member("mother", "mother", "immediate", ["hypertension"]),
+        _member("sibling", "sibling", "immediate", ["dyslipidemia"], count=2),
+        _member("paternal-grandfather", "grandfather", "paternal", ["diabetes", "stroke"]),
+        _member("paternal-grandmother", "grandmother", "paternal", ["colorectal_cancer"]),
+        _member("maternal-grandfather", "grandfather", "maternal", ["colorectal_cancer"]),
+        _member("maternal-grandmother", "grandmother", "maternal"),
+    ]
+    levels = {row["condition"]: row for row in family_risk(_account(family, known=["stroke"]))}
+    assert levels["hypertension"]["level"] == "very_high"       # both parents
+    assert levels["diabetes"]["level"] == "very_high"           # a parent and a grandparent
+    assert levels["dyslipidemia"]["level"] == "very_high"       # two siblings
+    assert levels["colorectal_cancer"]["level"] == "moderate"   # one grandparent on each side
+    assert levels["stroke"]["level"] == "diagnosed"             # already in the person's own profile
+    assert levels["breast_cancer"]["level"] == "none" and not levels["breast_cancer"]["advice"]
+    assert levels["diabetes"]["relatives"] == ["father", "paternal-grandfather"] and levels["diabetes"]["advice"]
+    # One parent alone is "high"; an unknown parent is not the same as a clean history.
+    alone = [_member("father", "father", "immediate", ["diabetes"]), _member("mother", "mother", "immediate", knowledge="unknown"),
+             _member("sibling", "sibling", "immediate")]
+    alone_levels = {row["condition"]: row["level"] for row in family_risk(_account(alone))}
+    assert alone_levels["diabetes"] == "high" and alone_levels["stroke"] == "unknown"
+    overview = risk_overview(_account(alone), None)
+    assert overview["relatives_unknown"] == 1 and overview["scores"]["overall"] is None and overview["scores"]["pgrs"] > 0
+    # Cancers never move the cardiometabolic score.
+    cancer_only = [_member("mother", "mother", "immediate", ["breast_cancer"])]
+    assert risk_overview(_account(cancer_only), 0.0)["scores"]["pgrs"] == 0

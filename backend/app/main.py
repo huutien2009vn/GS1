@@ -23,7 +23,7 @@ from .schemas import (AccountProfile, AssessmentCreate, AssessmentHistoryItem, A
                       FeedbackCreate, FeedbackResult, MedicalDocumentAnalyzeResult,
                       MedicalRecordCreate, MedicalRecordResult, MeasurementCreate)
 from .services.ai_service import AIInsightService
-from .services.risk_engine import calculate_risk
+from .services.risk_engine import calculate_risk, risk_overview
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = ROOT_DIR / "frontend"
@@ -96,6 +96,15 @@ async def save_profile(payload: AccountProfile, user: User = Depends(current_use
     user.onboarding_completed = True
     await session.commit()
     return {"user": public_user(user), "health": user.health_profile}
+
+
+@app.get("/api/risk")
+async def get_risk(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    if not user.onboarding_completed or not user.health_profile:
+        raise HTTPException(409, "Hãy hoàn thành hồ sơ sức khỏe trước.")
+    vital_score = await session.scalar(select(Assessment.vital_score).where(Assessment.user_id == user.id)
+                                       .order_by(Assessment.created_at.desc()).limit(1))
+    return risk_overview(AccountProfile.model_validate(user.health_profile), vital_score)
 
 
 @app.post("/api/assessments", response_model=AssessmentResult, status_code=201)

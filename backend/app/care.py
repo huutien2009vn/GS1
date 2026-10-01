@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import current_user
 from .database import get_session
 from .models import Assessment, CareInvite, CareLink, User
-from .schemas import AssessmentHistoryItem, AssessmentResult
+from .schemas import AccountProfile, AssessmentHistoryItem, AssessmentResult
+from .services.risk_engine import risk_overview
 
 router = APIRouter(prefix="/api/care", tags=["care"])
 
@@ -135,6 +136,16 @@ async def patient_profile(patient_id: str, user: User = Depends(current_user),
     return {"display_name": patient.display_name,
             "health": {"display_name": patient.display_name, "profile": health.get("profile"),
                        "family_history": health.get("family_history", [])}}
+
+
+@router.get("/patients/{patient_id}/risk")
+async def patient_risk(patient_id: str, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    patient = await linked_patient(patient_id, user, session)
+    if not patient.health_profile:
+        raise HTTPException(404, "Không tìm thấy hồ sơ được chia sẻ.")
+    vital_score = await session.scalar(select(Assessment.vital_score).where(Assessment.user_id == patient.id)
+                                       .order_by(Assessment.created_at.desc()).limit(1))
+    return risk_overview(AccountProfile.model_validate(patient.health_profile), vital_score)
 
 
 @router.get("/patients/{patient_id}/assessments", response_model=list[AssessmentHistoryItem])
