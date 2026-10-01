@@ -41,6 +41,11 @@ INSIGHT_SCHEMA = {
 }
 
 
+DOCUMENT_VITALS = ("systolic", "diastolic", "heart_rate", "spo2", "glucose")
+DOCUMENT_CONDITIONS = ["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer"]
+DOCUMENT_MEMBERS = ["father", "mother", "sibling", "paternal-grandfather", "paternal-grandmother",
+                    "maternal-grandfather", "maternal-grandmother"]
+
 MEDICAL_DOCUMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -70,6 +75,26 @@ MEDICAL_DOCUMENT_SCHEMA = {
             },
         },
         "conditions": {"type": "array", "maxItems": 30, "items": {"type": "string", "maxLength": 180}},
+        "vitals": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {key: {"anyOf": [{"type": "number"}, {"type": "null"}]} for key in DOCUMENT_VITALS},
+            "required": list(DOCUMENT_VITALS),
+        },
+        "own_conditions": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": DOCUMENT_CONDITIONS}},
+        "family_conditions": {
+            "type": "array",
+            "maxItems": 49,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "member": {"type": "string", "enum": DOCUMENT_MEMBERS},
+                    "condition": {"type": "string", "enum": DOCUMENT_CONDITIONS},
+                },
+                "required": ["member", "condition"],
+            },
+        },
         "medications": {
             "type": "array",
             "maxItems": 30,
@@ -93,6 +118,7 @@ MEDICAL_DOCUMENT_SCHEMA = {
     },
     "required": [
         "document_type", "document_date", "provider", "title", "summary", "metrics", "conditions",
+        "vitals", "own_conditions", "family_conditions",
         "medications", "recommendations", "warnings", "confidence", "review_required", "source", "disclaimer",
     ],
 }
@@ -112,6 +138,9 @@ def _gemini_schema(value: Any) -> Any:
         result["type"] = "string"
         result["description"] = "Use an empty string when this value is unknown."
         return result
+    if isinstance(nullable, list) and {item.get("type") for item in nullable if isinstance(item, dict)} == {"number", "null"}:
+        # Same workaround for numbers; 0 is normalized to None before Pydantic validation.
+        return {"type": "number", "description": "Use 0 when this value is not printed on the document."}
     # Pydantic still enforces these constraints after generation. Removing them
     # avoids INVALID_ARGUMENT on models with a smaller schema-complexity budget.
     unsupported = {
@@ -137,6 +166,15 @@ def _medical_analysis_from_json(output: str) -> MedicalDocumentAnalysis:
         data["review_required"] = True
     if not str(data.get("disclaimer") or "").strip():
         data["disclaimer"] = "AI chỉ hỗ trợ trích xuất; hãy đối chiếu với bản gốc và nhân viên y tế."
+    # The structured part feeds the profile, so anything outside the known lists is dropped rather than trusted.
+    vitals = data.get("vitals") if isinstance(data.get("vitals"), dict) else {}
+    data["vitals"] = {key: value if isinstance(value := vitals.get(key), (int, float)) and value > 0 else None
+                      for key in DOCUMENT_VITALS}
+    own = data.get("own_conditions") if isinstance(data.get("own_conditions"), list) else []
+    data["own_conditions"] = list(dict.fromkeys(item for item in own if item in DOCUMENT_CONDITIONS))
+    family = data.get("family_conditions") if isinstance(data.get("family_conditions"), list) else []
+    data["family_conditions"] = [item for item in family if isinstance(item, dict)
+                                 and item.get("member") in DOCUMENT_MEMBERS and item.get("condition") in DOCUMENT_CONDITIONS]
     return MedicalDocumentAnalysis.model_validate(data)
 
 
@@ -291,7 +329,13 @@ class AIInsightService:
             "thông tin nhìn thấy rõ; không suy đoán, không chẩn đoán, không kê đơn và không tự kết luận bệnh. "
             "Nếu chữ mờ, thiếu ngữ cảnh, chỉ số ngoài khoảng hoặc cần chuyên môn xác nhận, thêm cảnh báo và đặt "
             "review_required=true. Không đưa tên, số điện thoại, địa chỉ, mã bệnh nhân hoặc định danh cá nhân vào "
-            "kết quả. Tóm tắt trung tính, source luôn là ai và nhắc đối chiếu bản gốc/chuyên gia y tế."
+            "kết quả. Tóm tắt trung tính, source luôn là ai và nhắc đối chiếu bản gốc/chuyên gia y tế. "
+            "vitals: chỉ điền chỉ số đo của chính người bệnh in rõ trên giấy (huyết áp tâm thu systolic và tâm trương "
+            "diastolic tính bằng mmHg, nhịp tim heart_rate lần/phút, spo2 %, đường huyết glucose tính bằng mg/dL; nếu giấy "
+            "ghi mmol/L thì nhân 18); chỉ số không có trên giấy thì để trống, không lấy từ khoảng tham chiếu. "
+            "own_conditions: chỉ ghi bệnh mà giấy nêu rõ là chẩn đoán của người bệnh. family_conditions: chỉ ghi khi giấy "
+            "nêu rõ tiền sử gia đình kèm người thân cụ thể (bố, mẹ, anh chị em ruột, ông bà nội, ông bà ngoại); không suy "
+            "ra từ họ tên hay từ bệnh của người bệnh."
         )
         try:
             if self.provider == "google":

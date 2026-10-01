@@ -307,6 +307,15 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .analysis-disclaimer, .privacy-result { font-size: .889rem; color: var(--ink-2); }
 .document-drop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 28px 16px; margin: 8px 0 16px; border: 2px dashed var(--line-strong); border-radius: var(--radius); background: var(--bg); text-align: center; cursor: pointer; }
 .document-drop:hover { border-color: var(--blue); }
+/* What a scanned document adds to the profile; every item can be unticked or corrected before saving. */
+.document-apply { margin: 16px 0; padding-top: 16px; border-top: 1px solid var(--line); animation: view-in .22s var(--ease-out); }
+.document-apply:empty { display: none; }
+.apply-group { margin: 16px 0; }
+.apply-group legend { padding: 0; margin-bottom: 8px; font-weight: 600; }
+.apply-group .field-grid { margin-top: 12px; }
+.apply-group .check-label { min-height: 44px; }
+.scan-image { display: block; max-width: 100%; max-height: 60dvh; margin: 0 auto; border: 1px solid var(--line); border-radius: 4px; }
+.record-actions .link-button:not(.hidden) { animation: fade-in .22s var(--ease-out); }
 .document-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .document-drop strong { color: var(--blue); }
 .document-drop img { max-width: 100%; max-height: 240px; margin-top: 12px; border-radius: 4px; }

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 
 Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer"]
 Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother"]
+FamilyMember = Literal["father", "mother", "sibling", "paternal-grandfather", "paternal-grandmother",
+                       "maternal-grandfather", "maternal-grandmother"]
+MeasurementSource = Literal["manual", "ble", "simulation", "document"]
 
 
 class ProfileInput(BaseModel):
@@ -97,7 +100,7 @@ class AssessmentResult(BaseModel):
     alerts: list[AlertItem]
     insight: AIInsight
     disclaimer: str
-    measurement_source: Literal["manual", "ble", "simulation"] = "manual"
+    measurement_source: MeasurementSource = "manual"
     measured_vitals: VitalSample | None = None
 
 
@@ -155,10 +158,18 @@ class AccountProfile(BaseModel):
 class MeasurementCreate(BaseModel):
     vitals: VitalSample
     samples: list[VitalSample] = Field(default_factory=list, max_length=120)
-    source: Literal["manual", "ble", "simulation"] = "manual"
+    source: MeasurementSource = "manual"
+    # The date printed on a scanned document. Only "document" readings carry one; every other reading is dated now.
+    measured_on: date | None = None
 
     @model_validator(mode="after")
     def require_measurement(self):
+        if self.measured_on is not None:
+            if self.source != "document":
+                raise ValueError("Chỉ số từ giấy tờ mới được ghi ngày khác hôm nay.")
+            # One day of slack: the user's "today" can be ahead of the server's UTC date.
+            if not date(1950, 1, 1) <= self.measured_on <= datetime.now(timezone.utc).date() + timedelta(days=1):
+                raise ValueError("Ngày trên giấy tờ không hợp lệ.")
         values = self.vitals.model_dump(exclude={"timestamp"})
         if all(value is None for value in values.values()):
             raise ValueError("Vui lòng cung cấp ít nhất một chỉ số.")
@@ -187,6 +198,24 @@ class MedicalMedication(BaseModel):
     frequency: str = Field(default="", max_length=160)
 
 
+class DocumentVitals(BaseModel):
+    """Readings printed on the document, as the AI read them. Ranges are checked when the user applies them."""
+    model_config = ConfigDict(extra="forbid")
+
+    systolic: float | None = None
+    diastolic: float | None = None
+    heart_rate: float | None = None
+    spo2: float | None = None
+    glucose: float | None = None
+
+
+class DocumentFamilyCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    member: FamilyMember
+    condition: Condition
+
+
 class MedicalDocumentAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -197,6 +226,10 @@ class MedicalDocumentAnalysis(BaseModel):
     summary: str = Field(min_length=1, max_length=1200)
     metrics: list[MedicalMetric] = Field(default_factory=list, max_length=50)
     conditions: list[str] = Field(default_factory=list, max_length=30)
+    # What the app can put into the profile after the user has checked it. Records saved earlier have none.
+    vitals: DocumentVitals = Field(default_factory=DocumentVitals)
+    own_conditions: list[Condition] = Field(default_factory=list, max_length=7)
+    family_conditions: list[DocumentFamilyCondition] = Field(default_factory=list, max_length=49)
     medications: list[MedicalMedication] = Field(default_factory=list, max_length=30)
     recommendations: list[str] = Field(default_factory=list, max_length=20)
     warnings: list[str] = Field(default_factory=list, max_length=20)

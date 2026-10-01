@@ -1,4 +1,5 @@
 import hashlib
+from datetime import datetime, time, timezone
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,7 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auth import current_user, public_user, router as auth_router
-from .care import router as care_router
+from .care import current_vital_score, router as care_router
 from .config import get_settings
 from .database import engine, get_session
 from .migrations import migrate_schema
@@ -152,9 +153,7 @@ async def delete_avatar(user: User = Depends(current_user), session: AsyncSessio
 async def get_risk(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
     if not user.onboarding_completed or not user.health_profile:
         raise HTTPException(409, "Hãy hoàn thành hồ sơ sức khỏe trước.")
-    vital_score = await session.scalar(select(Assessment.vital_score).where(Assessment.user_id == user.id)
-                                       .order_by(Assessment.created_at.desc()).limit(1))
-    return risk_overview(AccountProfile.model_validate(user.health_profile), vital_score)
+    return risk_overview(AccountProfile.model_validate(user.health_profile), await current_vital_score(user.id, session))
 
 
 @app.post("/api/assessments", response_model=AssessmentResult, status_code=201)
@@ -166,11 +165,14 @@ async def create_assessment(measurement: MeasurementCreate, user: User = Depends
     payload = AssessmentCreate(profile=profile.profile, family_history=profile.family_history,
                                vitals=measurement.vitals, samples=measurement.samples)
     result = calculate_risk(payload).result
-    if profile.ai_consent and not user.is_demo and measurement.source != "simulation":
+    if profile.ai_consent and not user.is_demo and measurement.source not in {"simulation", "document"}:
         result.insight = await ai_service.enrich(payload, result)
     result.measurement_source = measurement.source
     result.measured_vitals = measurement.vitals
-    record = Assessment(user_id=user.id, profile=payload.profile.model_dump(mode="json"),
+    if measurement.measured_on:
+        # Midday UTC keeps the printed date the same calendar day in Vietnam and nearby time zones.
+        result.created_at = datetime.combine(measurement.measured_on, time(12), tzinfo=timezone.utc)
+    record = Assessment(user_id=user.id, created_at=result.created_at, profile=payload.profile.model_dump(mode="json"),
                         family_history=[item.model_dump(mode="json") for item in payload.family_history],
                         vitals=measurement.vitals.model_dump(mode="json") | {"source": measurement.source},
                         risk_level=result.risk_level, overall_score=result.scores.overall,
@@ -267,7 +269,7 @@ async def analyze_medical_record(
     return MedicalDocumentAnalyzeResult(
         analysis=analysis,
         document_hash=hashlib.sha256(content).hexdigest(),
-        privacy_note="Ảnh gốc không được ghi vào cơ sở dữ liệu hoặc kho tệp GeneSense; tệp tạm đã được đóng sau khi đọc.",
+        privacy_note="Ảnh gốc không được ghi vào máy chủ GeneSense. Khi bạn lưu, ảnh chỉ được giữ trên thiết bị này.",
     )
 
 
