@@ -332,6 +332,13 @@ dialog::backdrop { background: #0d2c5473; }
 :root { --ease-out: cubic-bezier(.16, 1, .3, 1); }
 .view:not(.hidden) { animation: view-in .22s var(--ease-out); }
 @keyframes view-in { from { opacity: .4; transform: translateY(6px); } }
+/* Whole screens (edit wizard, report, login) slide up; the app shell only fades, because a transform on it
+   would detach the fixed bottom nav while the animation runs. */
+.onboarding-screen:not(.hidden), .report-screen:not(.hidden), .login-screen:not(.hidden) { animation: screen-in .26s var(--ease-out); }
+.app-shell:not(.hidden) { animation: fade-in .22s ease-out; }
+@keyframes screen-in { from { opacity: 0; transform: translateY(14px); } }
+/* Wizard steps and blocks that appear in place (alerts, banners, new rows) use the same small rise. */
+[data-step]:not([hidden]), .emergency:not(.hidden), .viewing-banner:not(.hidden), .care-alert, #care-code-box > *, #recent-emergency:not(.hidden), .inline-message:not(.hidden) { animation: view-in .22s var(--ease-out); }
 dialog[open] { animation: dialog-in .24s var(--ease-out); }
 dialog[open]::backdrop { animation: fade-in .24s ease-out; }
 dialog.closing { animation: dialog-out .16s ease-in forwards; }
@@ -393,6 +400,7 @@ details[open]::details-content { block-size: auto; }
 @media print {
   html { scrollbar-gutter: auto; }
   body { background: #fff; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
   .report-toolbar, .toast-region, .skip-link { display: none !important; }
   .report-screen { min-height: 0; padding: 0; background: #fff; overflow: visible; }
   .report-sheet { width: auto; min-height: 0; padding: 0; border: 0; }
