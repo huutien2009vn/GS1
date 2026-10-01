@@ -291,7 +291,12 @@ function renderTips() {
     { title: "Hỏi thêm người thân", action: "Nếu chưa rõ tiền sử bệnh trong gia đình, hãy hỏi bố mẹ rồi cập nhật hồ sơ." },
   ];
   const daily = dailyTip();
-  $("#tip-list").innerHTML = tips.slice(0, 4).map(tip => tipCard(tip, tipImage(tip))).join("") + tipCard(daily, tipImage(daily), "Gợi ý hôm nay");
+  const cards = tips.slice(0, 4).map(tip => tipCard(tip, tipImage(tip)));
+  const dailyCard = tipCard(daily, tipImage(daily), "Gợi ý hôm nay");
+  $("#tip-list").innerHTML = cards.join("") + dailyCard;
+  // Today shows only the top personal tip and the daily one; advice must not compete with the emergency panel.
+  $("#today-tips").innerHTML = (cards[0] || "") + dailyCard;
+  $("#today-advice").classList.toggle("hidden", isEmergency(state.result));
   // During the 24h watch window the stored "all fine" follow-up would contradict Today.
   const followUp = state.result && !isEmergency(state.result) && recentEmergency() ? "" : state.result?.insight.follow_up || "";
   $("#follow-up").textContent = followUp;
@@ -333,6 +338,7 @@ function renderDashboard() {
   const hiddenSims = r && isReal({ vitals: { source: r.measurement_source } }) && state.records.some(row => !isReal(row));
   $("#measurement-context").textContent = r ? (hiddenSims ? "Không tính dữ liệu mẫu" : "") : "";
   renderMetrics();
+  renderTips();
 }
 function renderTrends() {
   const source = state.result?.measurement_source;

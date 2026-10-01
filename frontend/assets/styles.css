@@ -338,7 +338,7 @@ dialog::backdrop { background: #0d2c5473; }
 .app-shell:not(.hidden) { animation: fade-in .22s ease-out; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(14px); } }
 /* Wizard steps and blocks that appear in place (alerts, banners, new rows) use the same small rise. */
-[data-step]:not([hidden]), .emergency:not(.hidden), .viewing-banner:not(.hidden), .care-alert, #care-code-box > *, #recent-emergency:not(.hidden), .inline-message:not(.hidden) { animation: view-in .22s var(--ease-out); }
+[data-step]:not([hidden]), .emergency:not(.hidden), .viewing-banner:not(.hidden), .care-alert, #care-code-box > *, #recent-emergency:not(.hidden), #today-advice:not(.hidden), .inline-message:not(.hidden) { animation: view-in .22s var(--ease-out); }
 dialog[open] { animation: dialog-in .24s var(--ease-out); }
 dialog[open]::backdrop { animation: fade-in .24s ease-out; }
 dialog.closing { animation: dialog-out .16s ease-in forwards; }
@@ -368,7 +368,7 @@ details[open]::details-content { block-size: auto; }
 .result-detail-vitals strong { font-variant-numeric: tabular-nums; }
 
 /* Doctor's report: monochrome A4 sheet, printed through the browser dialog. */
-.heading-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.heading-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .report-screen { min-height: 100dvh; padding: 0 16px 48px; background: #e9ecf0; overflow-x: auto; }
 .report-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 210mm; margin: 0 auto; padding: 16px 0; }
 .report-sheet { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 16mm 15mm; background: #fff; color: #000; border: 1px solid #b8bec7; font-size: 11pt; line-height: 1.45; }
