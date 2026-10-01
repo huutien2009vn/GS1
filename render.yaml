@@ -1,0 +1,30 @@
+# Render blueprint: one free web service. The database is Neon (set DATABASE_URL by hand);
+# the service's own disk is wiped on every deploy, so SQLite must not be used here.
+services:
+  - type: web
+    name: genesense
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: APP_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ENABLE_DEMO_LOGIN
+        value: "true"
+      - key: DEMO_PUBLIC
+        value: "true"
+      - key: DEMO_ACCOUNTS_PER_HOUR
+        value: "10"
+      - key: DEMO_RETENTION_DAYS
+        value: "3"
+      # Fill these two in on the Render dashboard.
+      - key: APP_BASE_URL   # the service's own https address, for example https://genesense.onrender.com
+        sync: false
+      - key: DATABASE_URL   # the Neon connection string
+        sync: false

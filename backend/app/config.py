@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     session_secret: str = ""
     enable_demo_login: bool = True
+    # Opens the trial login to any device that can reach the site (off by default: local PC only).
+    demo_public: bool = False
+    demo_accounts_per_hour: int = 10
+    demo_retention_days: int = 3
 
     @property
     def google_enabled(self) -> bool:
@@ -48,7 +52,8 @@ class Settings(BaseSettings):
 
     @property
     def demo_enabled(self) -> bool:
-        return self.app_env == "development" and self.enable_demo_login and urlsplit(self.app_base_url).hostname in {"localhost", "127.0.0.1"}
+        local_only = self.app_env == "development" and urlsplit(self.app_base_url).hostname in {"localhost", "127.0.0.1"}
+        return self.enable_demo_login and (self.demo_public or local_only)
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
