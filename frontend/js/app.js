@@ -84,7 +84,7 @@ function errorAt(id, text = "") {
   el.classList.toggle("hidden", !text);
 }
 function screen(name) {
-  ["loading", "login", "onboarding", "app"].forEach(key => $("#" + key + "-screen").classList.toggle("hidden", key !== name));
+  ["loading", "login", "onboarding", "app", "report"].forEach(key => $("#" + key + "-screen").classList.toggle("hidden", key !== name));
   if (name !== "app") document.title = "GeneSense - Theo dõi sức khỏe";
   window.scrollTo(0, 0);
 }
@@ -471,6 +471,74 @@ function renderProfile() {
     notes.map(([title, text]) => "<h3>Ghi chú " + title.toLowerCase() + "</h3><p>" + esc(text) + "</p>").join("") + "</article>";
 }
 
+// Doctor's report: an A4 page built from the user's own real readings, saved as PDF through the print dialog.
+// ponytail: uses the readings already loaded (latest 100); add a date-range API if longer histories matter.
+const reportCharts = {};
+function reportRows(days) {
+  const since = Date.now() - days * 86400000;
+  return state.records.filter(row => isReal(row) && toDate(row.created_at).getTime() >= since).reverse();
+}
+function reportSummary(rows) {
+  const stat = (values, digits = 0) => values.length ? { n: values.length, avg: num(Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(digits))), min: num(Math.min(...values)), max: num(Math.max(...values)) } : null;
+  const flagged = key => rows.filter(row => ["attention", "alert"].includes(statusOf(key, row.vitals)[0])).length;
+  const bp = rows.filter(row => row.vitals.systolic != null && row.vitals.diastolic != null);
+  const sys = stat(bp.map(row => row.vitals.systolic)), dia = stat(bp.map(row => row.vitals.diastolic));
+  // Lowest and highest are whole readings (picked by systolic), so the pair shown was really measured together.
+  const pair = row => Math.round(row.vitals.systolic) + "/" + Math.round(row.vitals.diastolic);
+  const bySys = bp.slice().sort((x, y) => x.vitals.systolic - y.vitals.systolic);
+  const line = (label, unit, s, over) => "<tr><td>" + label + "</td><td>" + unit + "</td>" + (s ? "<td>" + s.n + "</td><td>" + s.avg + "</td><td>" + s.min + "</td><td>" + s.max + "</td><td>" + over + "</td>" : '<td colspan="5">Không có số đo trong kỳ</td>') + "</tr>";
+  const single = (key, label, unit, digits) => line(label, unit, stat(rows.filter(row => row.vitals[key] != null).map(row => row.vitals[key]), digits), flagged(key));
+  return line("Huyết áp", "mmHg", sys && { n: sys.n, avg: sys.avg + "/" + dia.avg, min: pair(bySys[0]), max: pair(bySys.at(-1)) }, flagged("systolic")) +
+    single("heart_rate", "Nhịp tim", "lần/phút", 0) + single("spo2", "Oxy trong máu (SpO₂)", "%", 1) + single("glucose", "Đường huyết", "mg/dL", 0);
+}
+function renderReport() {
+  const days = Number($("#report-days").value);
+  const rows = reportRows(days);
+  const h = state.health, p = h.profile, now = new Date();
+  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
+  const pad = n => String(n).padStart(2, "0");
+  const code = "GS-" + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + "-" + pad(now.getHours()) + pad(now.getMinutes());
+  const bmi = p.weight_kg / (p.height_cm / 100) ** 2;
+  const sex = { female: "Nữ", male: "Nam", other: "Không khai báo" }[p.sex] || "Không khai báo";
+  const cell = (key, v) => v[key] == null ? "" : valueOf(key, v);
+  const mark = v => { const levels = METRICS.map(m => statusOf(m.key, v)[0]); return levels.includes("alert") ? "Nguy hiểm" : levels.includes("attention") ? "Cần chú ý" : ""; };
+  const family = MEMBERS.map(m => {
+    const saved = h.family_history.find(row => row.member_id === m.id);
+    const text = saved?.knowledge === "known" && saved.conditions?.length ? saved.conditions.map(conditionName).join(", ") : saved?.knowledge === "none" ? "Không có bệnh đã biết" : "Chưa rõ";
+    return "<tr><td>" + m.label + "</td><td>" + esc(text) + "</td></tr>";
+  }).join("");
+  const notice = "Phiếu do người dùng tự ghi bằng ứng dụng GeneSense. Không phải kết quả khám bệnh, không có giá trị chẩn đoán.";
+  $("#report-sheet").innerHTML =
+    '<header class="report-head"><div><strong>GeneSense</strong><br>Ứng dụng theo dõi sức khỏe tại nhà</div><div class="report-meta">Mã phiếu: ' + code + "<br>Ngày lập: " + esc(date(now.toISOString(), false)) + "</div></header>" +
+    '<h1 id="report-title">PHIẾU TỔNG HỢP CHỈ SỐ SỨC KHỎE TẠI NHÀ</h1><p class="report-period">Kỳ báo cáo: ' + days + " ngày, đến ngày " + esc(date(now.toISOString(), false)) + '</p><p class="report-notice">' + notice + "</p>" +
+    "<h2>I. Thông tin người dùng</h2>" +
+    '<table class="report-table report-info"><tbody><tr><th>Họ tên</th><td>' + esc(h.display_name) + "</td><th>Tuổi</th><td>" + p.age + "</td><th>Giới tính</th><td>" + sex + "</td></tr>" +
+    "<tr><th>Chiều cao</th><td>" + num(p.height_cm) + " cm</td><th>Cân nặng</th><td>" + num(p.weight_kg) + " kg</td><th>BMI</th><td>" + num(bmi) + " (" + bmiLabel(bmi) + ")</td></tr>" +
+    "<tr><th>Bệnh đã chẩn đoán</th><td colspan=\"5\">" + esc(p.known_conditions.map(conditionName).filter(Boolean).join(", ") || "Không khai báo") + "</td></tr>" +
+    "<tr><th>Hút thuốc</th><td>" + (p.smoker ? "Có" : "Không") + "</td><th>Vận động</th><td colspan=\"3\">" + p.activity_minutes_week + " phút mỗi tuần</td></tr></tbody></table>" +
+    "<h2>II. Tiền sử bệnh trong gia đình</h2>" +
+    '<table class="report-table"><thead><tr><th>Người thân</th><th>Bệnh đã biết</th></tr></thead><tbody>' + family + "</tbody></table>" +
+    "<h2>III. Tổng hợp trong kỳ</h2>" +
+    (rows.length ? '<table class="report-table report-num"><thead><tr><th>Chỉ số</th><th>Đơn vị</th><th>Số lần đo</th><th>Trung bình</th><th>Thấp nhất</th><th>Cao nhất</th><th>Số lần ngoài ngưỡng</th></tr></thead><tbody>' + reportSummary(rows) + "</tbody></table>" : "<p>Không có số đo trong kỳ này. Dữ liệu mẫu không được đưa vào phiếu.</p>") +
+    (rows.length ? "<h2>IV. Biểu đồ diễn biến</h2><div class=\"report-charts\">" + Object.keys(TRENDS).map(id => '<figure data-report-chart="' + id + '"><figcaption></figcaption><div class="trend-chart"></div></figure>').join("") + '</div><p class="report-small">Đường liền: tâm thu hoặc chỉ số chính. Đường đứt: tâm trương. Nền xám hoặc đường chấm: ngưỡng tham khảo.</p>' +
+      "<h2>V. Bảng số đo chi tiết</h2>" +
+      '<table class="report-table report-num"><thead><tr><th>Thời gian</th><th>Huyết áp (mmHg)</th><th>Nhịp tim (lần/phút)</th><th>SpO₂ (%)</th><th>Đường huyết (mg/dL)</th><th>Nguồn</th><th>Ghi chú</th></tr></thead><tbody>' +
+      rows.slice().reverse().map(row => "<tr><td>" + esc(date(row.created_at)) + "</td><td>" + cell("systolic", row.vitals) + "</td><td>" + cell("heart_rate", row.vitals) + "</td><td>" + cell("spo2", row.vitals) + "</td><td>" + cell("glucose", row.vitals) + "</td><td>" + esc(SOURCE_NAMES[row.vitals.source || "manual"]) + "</td><td>" + mark(row.vitals) + "</td></tr>").join("") + "</tbody></table>" : "") +
+    '<p class="report-notice report-end">' + notice + " Ngưỡng tham khảo dùng trong phiếu là ngưỡng minh họa của ứng dụng. Hãy mang phiếu này đến bác sĩ để được tư vấn.</p>";
+  for (const [id, spec] of Object.entries(TRENDS)) {
+    const figure = $('[data-report-chart="' + id + '"]');
+    if (!figure) continue;
+    const points = rows.filter(row => spec.series.every(([key]) => row.vitals[key] != null));
+    figure.classList.toggle("hidden", !points.length);
+    if (!points.length) continue;
+    figure.querySelector("figcaption").textContent = { bp: "Huyết áp (mmHg)", heart_rate: "Nhịp tim (lần/phút)", spo2: "SpO₂ (%)", glucose: "Đường huyết (mg/dL)" }[id];
+    reportCharts[id] = new TrendChart(figure.querySelector(".trend-chart"));
+    reportCharts[id].set({ unit: spec.unit, band: spec.band, thresholds: spec.thresholds?.map(t => ({ ...t, color: "#555" })), min: spec.min, max: spec.max, times: points.map(row => toDate(row.created_at)),
+      series: spec.series.map(([key, label], index) => ({ label, color: "#000", dash: index ? "6 4" : "", values: points.map(row => row.vitals[key]) })) });
+  }
+}
+function openReport() { screen("report"); document.title = "Phiếu tổng hợp - GeneSense"; renderReport(); }
+
 function analysisMarkup(analysis) {
   const metricRows = analysis.metrics?.length ? '<div class="extracted-metrics">' + analysis.metrics.map(metric => {
     const badge = metric.flag === "normal" ? "safe" : metric.flag === "unknown" ? "neutral" : "attention";
@@ -855,6 +923,10 @@ function bindEvents() {
   $("#disconnect-device").addEventListener("click", stopStreams);
   $("#save-device").addEventListener("click", () => saveMeasurement(freshValues(), state.deviceSource || "ble", state.samples.slice()));
   $("#refresh-history").addEventListener("click", refreshRecords);
+  $("#open-report").addEventListener("click", openReport);
+  $("#report-days").addEventListener("change", renderReport);
+  $("#report-print").addEventListener("click", () => window.print());
+  $("#report-back").addEventListener("click", () => { screen("app"); navigate("history"); });
   $("#history-filter").addEventListener("change", renderHistory);
   $("#rating-buttons").innerHTML = [1, 2, 3, 4, 5].map(n => '<button type="button" data-rating="' + n + '" aria-pressed="false">' + n + "</button>").join("");
   $("#rating-buttons").addEventListener("click", event => {
