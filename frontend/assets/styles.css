@@ -371,6 +371,7 @@ details[open]::details-content { block-size: auto; }
 .heading-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .report-screen { min-height: 100dvh; padding: 0 16px 48px; background: #e9ecf0; overflow-x: auto; }
 .report-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 210mm; margin: 0 auto; padding: 16px 0; }
+.report-toolbar .inline-select select { min-width: 0; }
 .report-sheet { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 16mm 15mm; background: #fff; color: #000; border: 1px solid #b8bec7; font-size: 11pt; line-height: 1.45; }
 .report-sheet h1 { margin: 14pt 0 2pt; font-size: 15pt; font-weight: 700; text-align: center; }
 .report-sheet h2 { margin: 14pt 0 5pt; font-size: 11.5pt; font-weight: 700; break-after: avoid; }
