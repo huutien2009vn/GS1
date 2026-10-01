@@ -114,8 +114,79 @@ function statusOf(key, v) {
   if (key === "glucose") return n < 54 || n > 300 ? ["alert", "Nguy hiểm"] : n < 70 || n > 180 ? ["attention", "Cần chú ý"] : ["safe", "Trong ngưỡng an toàn"];
   return ["safe", "Trong ngưỡng an toàn"];
 }
+// Profile picture: the uploaded photo, or the first letter of the given name (the last word of a Vietnamese name).
+const initialOf = name => (name.trim().split(/\s+/).pop() || "?").charAt(0).toUpperCase();
+function renderAvatar() {
+  $$("[data-avatar]").forEach(el => {
+    if (!state.avatarUrl) { el.textContent = initialOf(state.user.display_name); return; }
+    const img = new Image();
+    img.alt = ""; img.src = state.avatarUrl;
+    el.replaceChildren(img);
+  });
+  $("#avatar-remove")?.classList.toggle("hidden", !state.avatarUrl);
+}
+function setAvatar(blob) {
+  if (state.avatarUrl) URL.revokeObjectURL(state.avatarUrl);
+  state.avatarUrl = blob ? URL.createObjectURL(blob) : null;
+  if (state.user) renderAvatar();
+}
+async function loadAvatar() {
+  const epoch = state.authEpoch;
+  const blob = await api.avatar();
+  if (epoch === state.authEpoch) setAvatar(blob);
+}
+// Cropping: the chosen photo is drawn on a 280px square canvas; x, y and zoom say which part of it is kept.
+const CROP = 280;
+const crop = { image: null, zoom: 1, x: 0, y: 0 };
+function drawCrop(canvas = $("#avatar-canvas")) {
+  const { image } = crop, scale = CROP / Math.min(image.width, image.height) * crop.zoom, k = canvas.width / CROP;
+  // The photo always covers the whole square, so no empty edge can be saved.
+  crop.x = Math.min(0, Math.max(CROP - image.width * scale, crop.x));
+  crop.y = Math.min(0, Math.max(CROP - image.height * scale, crop.y));
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, crop.x * k, crop.y * k, image.width * scale * k, image.height * scale * k);
+}
+function moveCrop(dx, dy) { crop.x += dx; crop.y += dy; drawCrop(); }
+function zoomCrop(zoom) {
+  // Zoom around the centre of the square, not its corner.
+  const ratio = zoom / crop.zoom;
+  crop.x = CROP / 2 - (CROP / 2 - crop.x) * ratio; crop.y = CROP / 2 - (CROP / 2 - crop.y) * ratio; crop.zoom = zoom;
+  drawCrop();
+}
+async function chooseAvatar(file) {
+  if (!file || state.viewing) return;
+  try { crop.image = await createImageBitmap(file); }
+  catch { toast("Không đọc được ảnh này. Hãy chọn ảnh khác.", "error"); return; }
+  const fit = CROP / Math.min(crop.image.width, crop.image.height);
+  Object.assign(crop, { zoom: 1, x: (CROP - crop.image.width * fit) / 2, y: (CROP - crop.image.height * fit) / 2 });
+  $("#avatar-zoom").value = 1;
+  drawCrop();
+  $("#avatar-dialog").showModal();
+}
+// Only a 256px JPEG of the chosen area leaves the device.
+async function saveAvatar() {
+  const button = $("#avatar-save"); button.disabled = true;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 256;
+    drawCrop(canvas);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    await api.saveAvatar(blob);
+    setAvatar(blob);
+    closeDialog($("#avatar-dialog"));
+    toast("Đã đổi ảnh đại diện.");
+  } catch (error) { toast(error.message, "error"); }
+  finally { button.disabled = false; }
+}
+async function removeAvatar() {
+  if (state.viewing || !await confirmAction("Xóa ảnh đại diện?", "Ảnh sẽ được thay bằng chữ cái đầu của tên bạn.", "Xóa ảnh")) return;
+  try { await api.removeAvatar(); setAvatar(null); $("#avatar-change")?.focus(); toast("Đã xóa ảnh đại diện."); }
+  catch (error) { toast(error.message, "error"); }
+}
 function personalize() {
   $$("[data-user-name]").forEach(el => el.textContent = state.user.display_name);
+  renderAvatar();
   $("#greeting").textContent = state.viewing ? "Hồ sơ của " + state.viewing.name : "Xin chào, " + state.user.display_name;
   $("#demo-banner").classList.toggle("hidden", !state.user.is_demo);
   // Only trial accounts may create sample readings, so a real account's history never holds invented numbers.
@@ -465,7 +536,10 @@ function renderProfile() {
   const bmi = p.weight_kg / (p.height_cm / 100) ** 2;
   const sex = { female: "Nữ", male: "Nam", other: "Khác / không khai báo" }[p.sex] || "Không khai báo";
   $("#profile-content").innerHTML =
-    '<article class="panel"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.viewing ? "Hồ sơ được chia sẻ, chỉ xem" : state.user.email || "Hồ sơ mẫu") + '</p>' +
+    '<article class="panel"><div class="profile-identity">' +
+    (state.viewing ? '<span class="avatar large" aria-hidden="true">' + esc(initialOf(h.display_name)) + '</span>' : '<span class="avatar large" data-avatar aria-hidden="true"></span>') +
+    '<div><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.viewing ? "Hồ sơ được chia sẻ, chỉ xem" : state.user.email || "Hồ sơ mẫu") + '</p>' +
+    (state.viewing ? "" : '<div class="avatar-actions"><button type="button" id="avatar-change" class="link-button">Đổi ảnh đại diện</button><button type="button" id="avatar-remove" class="link-button hidden">Xóa ảnh</button></div>') + '</div></div>' +
     '<dl class="facts facts-2col">' +
       "<div><dt>Tuổi</dt><dd>" + p.age + "</dd></div><div><dt>Giới tính</dt><dd>" + sex + "</dd></div>" +
       "<div><dt>Chiều cao</dt><dd>" + num(p.height_cm) + " cm</dd></div><div><dt>Cân nặng</dt><dd>" + num(p.weight_kg) + " kg</dd></div>" +
@@ -474,6 +548,7 @@ function renderProfile() {
       (state.viewing ? "" : "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>") +
     "</dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" +
     '<article class="panel"><h2>Tiền sử bệnh trong gia đình</h2><div class="ft-summary">' + familySummary(h) + '</div><button class="link-button" data-nav="genetics">Xem sơ đồ gia đình và nguy cơ theo từng bệnh</button></article>';
+  if (!state.viewing) renderAvatar();
 }
 
 // Family-risk tab: a level per condition from who in the family has it, computed on the server from the current profile.
@@ -1016,11 +1091,17 @@ function clearAccount() {
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
   state.viewing = null; state.own = null; state.care = { patients: [], caregivers: [] }; document.body.classList.remove("viewing");
   $("#viewing-banner").classList.add("hidden"); $("#viewing-text").textContent = "";
+  setAvatar(null);
   state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#genetics-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
   $("#onboarding-form").reset(); $("#measurement-form").reset(); $("#feedback-form").reset();
   $("#toast-region").innerHTML = "";
+}
+async function confirmSignOut() {
+  const body = state.user.is_demo ? "Đây là tài khoản dùng thử. Sau khi đăng xuất, bạn sẽ không mở lại được tài khoản này và dữ liệu trong đó."
+    : "Bạn cần đăng nhập lại để xem hồ sơ và ghi chỉ số.";
+  if (await confirmAction("Đăng xuất?", body, "Đăng xuất")) signOut();
 }
 async function signOut() {
   try {
@@ -1047,6 +1128,7 @@ async function enterAccount(user) {
     state.editing = false; fillWizard(); screen("onboarding");
   } else {
     personalize(); screen("app");
+    loadAvatar();
     await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshCare(), refreshRisk()]);
     navigate(location.hash.slice(1) || "dashboard");
   }
@@ -1085,7 +1167,31 @@ function bindEvents() {
     finally { button.disabled = false; }
   });
   $("#retry-boot").addEventListener("click", boot);
-  $("#logout").addEventListener("click", signOut);
+  $("#logout").addEventListener("click", confirmSignOut);
+  // The header shows the signed-in person, so it always leads to their own profile, also while viewing a relative.
+  $("#account-link").addEventListener("click", async event => { if (state.viewing) { event.preventDefault(); await exitViewing(); navigate("profile"); } });
+  $("#profile-content").addEventListener("click", event => {
+    if (event.target.closest("#avatar-change")) $("#avatar-file").click();
+    if (event.target.closest("#avatar-remove")) removeAvatar();
+  });
+  $("#avatar-file").addEventListener("change", event => { chooseAvatar(event.target.files[0]); event.target.value = ""; });
+  $("#avatar-zoom").addEventListener("input", event => zoomCrop(Number(event.target.value)));
+  $("#avatar-save").addEventListener("click", saveAvatar);
+  const cropCanvas = $("#avatar-canvas");
+  // Positions are compared by hand: movementX is unreliable for touch in some browsers.
+  let dragFrom = null;
+  cropCanvas.addEventListener("pointerdown", event => { dragFrom = [event.clientX, event.clientY]; try { cropCanvas.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ } });
+  cropCanvas.addEventListener("pointermove", event => {
+    if (!dragFrom) return;
+    const k = CROP / cropCanvas.clientWidth;
+    moveCrop((event.clientX - dragFrom[0]) * k, (event.clientY - dragFrom[1]) * k);
+    dragFrom = [event.clientX, event.clientY];
+  });
+  ["pointerup", "pointercancel"].forEach(type => cropCanvas.addEventListener(type, () => { dragFrom = null; }));
+  cropCanvas.addEventListener("keydown", event => {
+    const step = { ArrowLeft: [16, 0], ArrowRight: [-16, 0], ArrowUp: [0, 16], ArrowDown: [0, -16] }[event.key];
+    if (step) { event.preventDefault(); moveCrop(...step); }
+  });
   $("#onboarding-exit").addEventListener("click", () => { if (state.editing) { state.editing = false; screen("app"); navigate(state.editReturn); } else signOut(); });
   $("#onboarding-form").addEventListener("submit", nextStep);
   $("#onboarding-form").addEventListener("change", event => {

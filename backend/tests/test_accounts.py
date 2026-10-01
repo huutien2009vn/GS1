@@ -119,6 +119,28 @@ def test_account_isolation_including_feedback_and_revoked_cookie(client):
     assert client.get("/api/auth/me").status_code == 401
 
 
+def test_profile_picture_is_validated_and_account_scoped(client):
+    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 100
+    assert client.get("/api/avatar").status_code == 401
+    login(client)
+    assert client.get("/api/avatar").status_code == 204
+    assert client.put("/api/avatar", content=b"<svg onload=alert(1)>").status_code == 422
+    assert client.put("/api/avatar", content=jpeg + b"0" * main.MAX_AVATAR_BYTES).status_code == 413
+    assert client.put("/api/avatar", content=jpeg).status_code == 204
+    assert client.put("/api/avatar", content=jpeg + b"1").status_code == 204  # replaces the first
+    response = client.get("/api/avatar")
+    assert response.content == jpeg + b"1" and response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "no-store" and response.headers["x-content-type-options"] == "nosniff"
+    owner = client.cookies.get(auth.COOKIE_NAME)
+    client.cookies.clear()
+    login(client)
+    assert client.get("/api/avatar").status_code == 204  # another account never sees it
+    client.cookies.clear()
+    client.cookies.set(auth.COOKIE_NAME, owner)
+    assert client.delete("/api/avatar").status_code == 204
+    assert client.get("/api/avatar").status_code == 204
+
+
 def test_assessment_delete_is_account_scoped(client):
     login(client)
     client.put("/api/profile", json=PROFILE)

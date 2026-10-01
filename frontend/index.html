@@ -84,7 +84,7 @@
 
   <div id="app-screen" class="app-shell hidden">
     <header class="site-header"><div class="site-header-inner"><a class="brand" href="#dashboard"><img src="/assets/favicon.svg" width="36" height="36" alt=""><span><strong>GeneSense</strong><small>Theo dõi sức khỏe và sàng lọc bệnh mạn tính</small></span></a>
-      <div class="header-account"><span data-user-name></span><button id="logout" class="header-link">Đăng xuất</button></div></div>
+      <a class="header-account" id="account-link" href="#profile"><span class="avatar" data-avatar aria-hidden="true"></span><span class="visually-hidden">Hồ sơ của </span><span class="header-name" data-user-name></span></a></div>
       <nav class="main-nav" aria-label="Điều hướng chính"><div class="main-nav-inner">
         <button data-nav="dashboard" class="active">Hôm nay</button>
         <button data-nav="history">Lịch sử đo</button>
@@ -173,8 +173,10 @@
       <section id="profile-view" class="view hidden">
         <div class="page-heading"><h1>Hồ sơ</h1><button id="edit-profile" class="btn outline own-only">Sửa hồ sơ</button></div>
         <div id="profile-content"></div>
+        <input type="file" id="avatar-file" accept="image/*" hidden>
         <article id="care-panel" class="panel own-only"></article>
         <article class="panel feedback-card own-only"><h2>Góp ý</h2><form id="feedback-form"><fieldset class="rating"><legend>Mức độ hài lòng, từ 1 (thấp) đến 5 (cao)</legend><div id="rating-buttons"></div></fieldset><label>Nội dung góp ý<textarea id="feedback-message" rows="3" maxlength="2000"></textarea></label><button class="btn outline" type="submit">Gửi góp ý</button></form></article>
+        <button type="button" id="logout" class="btn outline signout own-only">Đăng xuất</button>
       </section>
 
       <p class="legal-note">GeneSense hỗ trợ theo dõi sức khỏe, không phải thiết bị y tế và không thay thế chẩn đoán của bác sĩ. Khi có dấu hiệu cấp cứu, gọi 115.</p>
@@ -188,6 +190,7 @@
     <div id="device-panel" hidden><h3 id="device-name">Kết nối máy đo qua Bluetooth</h3><p id="device-message" class="note">Bật Bluetooth trên máy đo, đặt gần điện thoại rồi bấm Kết nối.</p><div class="device-actions"><button class="btn primary" id="connect-ble">Kết nối</button><button class="btn outline" id="simulate-ble">Dùng dữ liệu mẫu</button></div><div id="device-values" class="device-values hidden"></div><p id="device-source-note" class="note">Nếu không kết nối được, hãy dùng Nhập tay.</p><button class="btn primary full-width" id="save-device" disabled>Lưu chỉ số</button><button class="link-button full-width hidden" id="disconnect-device">Ngắt kết nối</button></div>
     <p id="measurement-error" class="inline-message error hidden" role="alert"></p>
   </dialog>
+  <dialog id="avatar-dialog"><div class="dialog-heading"><h2>Chọn vùng ảnh</h2><button class="icon-button" data-close="avatar-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><p>Kéo ảnh để chọn phần nằm trong vòng tròn.</p><div class="crop-box"><canvas id="avatar-canvas" width="280" height="280" tabindex="0" aria-label="Vùng ảnh. Dùng phím mũi tên để di chuyển ảnh."></canvas></div><label for="avatar-zoom">Phóng to</label><input type="range" id="avatar-zoom" min="1" max="3" step="0.01" value="1"><div class="dialog-actions"><button type="button" class="btn outline" data-close="avatar-dialog">Hủy</button><button type="button" id="avatar-save" class="btn primary">Lưu ảnh</button></div></dialog>
   <dialog id="result-dialog"><div class="dialog-heading"><h2>Chi tiết lần đo</h2><button class="icon-button" data-close="result-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><div id="result-detail"></div><div class="record-actions own-only"><button id="delete-assessment" class="delete-record">Xóa lần đo này</button></div></dialog>
   <dialog id="medical-upload-dialog" class="medical-upload-dialog"><div class="dialog-heading"><h2>Thêm ảnh giấy tờ</h2><button class="icon-button" data-close="medical-upload-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
     <div id="upload-stage"><p class="note">Chụp rõ toàn bộ giấy tờ, tránh bị lóa.</p><label class="document-drop" for="medical-document-file"><input id="medical-document-file" type="file" accept="image/jpeg,image/png,image/webp"><strong>Chọn ảnh</strong><small>JPG, PNG hoặc WebP, tối đa 8 MB</small><img id="document-preview" class="hidden" alt="Ảnh giấy tờ đã chọn"></label>
