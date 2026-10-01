@@ -84,6 +84,16 @@ class CareInvite(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class CareCodeFailure(Base):
+    """A wrong sharing code typed by a user; counted to slow down guessing."""
+
+    __tablename__ = "care_code_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CareLink(Base):
     """Read-only access for a caregiver to one patient's readings, profile and family history."""
 

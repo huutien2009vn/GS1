@@ -394,7 +394,6 @@ def test_care_link_grants_read_only_access_until_revoked(client):
 
 def test_care_invite_expiry_replacement_and_rate_limit(client):
     from backend.app import care
-    care._failed_codes.clear()
     _, patient_cookie = _demo_with_profile(client)
     first = client.post("/api/care/invites").json()["code"]
     second = client.post("/api/care/invites").json()["code"]
@@ -412,4 +411,3 @@ def test_care_invite_expiry_replacement_and_rate_limit(client):
     for _ in range(3):
         assert client.post("/api/care/links", json={"code": "WRONGCODE"}).status_code == 404
     assert client.post("/api/care/links", json={"code": "WRONGCODE"}).status_code == 429
-    care._failed_codes.clear()

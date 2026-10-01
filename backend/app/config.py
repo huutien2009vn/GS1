@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -69,4 +70,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    # On Vercel the production address is known to the platform, so APP_BASE_URL need not be set by hand.
+    production_host = os.environ.get("VERCEL_PROJECT_PRODUCTION_URL")
+    if production_host and "APP_BASE_URL" not in os.environ:
+        settings.app_base_url = "https://" + production_host
+    return settings

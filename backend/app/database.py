@@ -1,7 +1,9 @@
+import os
 from collections.abc import AsyncGenerator
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from .config import get_settings
 
@@ -28,6 +30,8 @@ settings = get_settings()
 engine = create_async_engine(
     normalize_database_url(settings.database_url),
     pool_pre_ping=True,
+    # Serverless: a pooled connection must not outlive the request (and event loop) that opened it.
+    **({"poolclass": NullPool} if os.environ.get("VERCEL") else {}),
     echo=settings.app_env == "debug",
 )
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)

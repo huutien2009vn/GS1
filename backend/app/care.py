@@ -1,17 +1,16 @@
 """Family sharing: a patient invites a relative with a one-time code; the relative gets read-only access."""
 import hashlib
 import secrets
-import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import current_user
 from .database import get_session
-from .models import Assessment, CareInvite, CareLink, User
+from .models import Assessment, CareCodeFailure, CareInvite, CareLink, User
 from .schemas import AccountProfile, AssessmentHistoryItem, AssessmentResult
 from .services.risk_engine import risk_overview
 
@@ -23,8 +22,6 @@ CODE_LENGTH = 8
 INVITE_HOURS = 24
 MAX_FAILED_CODES = 5
 FAILED_WINDOW_SECONDS = 15 * 60
-# ponytail: in-memory and per-process; move to the database or a cache if the app runs on several workers.
-_failed_codes: dict[str, list[float]] = {}
 
 
 class CareLinkCreate(BaseModel):
@@ -68,13 +65,16 @@ async def create_invite(user: User = Depends(current_user), session: AsyncSessio
 @router.post("/links", status_code=201)
 async def accept_invite(payload: CareLinkCreate, user: User = Depends(current_user),
                         session: AsyncSession = Depends(get_session)):
-    now = time.monotonic()
-    failures = [t for t in _failed_codes.get(user.id, []) if now - t < FAILED_WINDOW_SECONDS]
-    if len(failures) >= MAX_FAILED_CODES:
+    # Counted in the database so the limit holds across workers and serverless instances.
+    since = datetime.now(timezone.utc) - timedelta(seconds=FAILED_WINDOW_SECONDS)
+    failures = await session.scalar(select(func.count()).select_from(CareCodeFailure).where(
+        CareCodeFailure.user_id == user.id, CareCodeFailure.created_at >= since))
+    if failures >= MAX_FAILED_CODES:
         raise HTTPException(429, "Bạn đã nhập sai mã quá nhiều lần. Hãy thử lại sau 15 phút.")
     invite = await session.get(CareInvite, _digest(_normalize(payload.code)))
     if not invite or _aware(invite.expires_at) <= datetime.now(timezone.utc):
-        _failed_codes[user.id] = failures + [now]
+        session.add(CareCodeFailure(user_id=user.id))
+        await session.commit()
         raise HTTPException(404, "Mã không đúng hoặc đã hết hạn. Hãy xin người thân tạo mã mới.")
     if invite.patient_id == user.id:
         raise HTTPException(400, "Đây là mã của chính bạn. Hãy gửi mã này cho người thân.")
@@ -85,10 +85,10 @@ async def accept_invite(payload: CareLinkCreate, user: User = Depends(current_us
         link = CareLink(patient_id=invite.patient_id, caregiver_id=user.id)
         session.add(link)
     await session.delete(invite)  # single use
+    await session.execute(delete(CareCodeFailure).where(CareCodeFailure.user_id == user.id))
     await session.flush()
     result = {"link_id": link.id, "patient_id": patient.id, "display_name": patient.display_name}
     await session.commit()
-    _failed_codes.pop(user.id, None)
     return result
 
 
