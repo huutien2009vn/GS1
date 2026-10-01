@@ -58,6 +58,22 @@ if settings.app_env == "development":
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 
+# Sent with the page ("/", the only HTML document the app serves). The page may load only its own
+# scripts, styles and images, plus the web font from Google Fonts; inline scripts, inline event
+# handlers and style attributes are refused, so text that slips into the page cannot run as code.
+# New frontend code must therefore set styles through classes or element.style, never style="...".
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' blob:",  # blob: is the preview of a document photo before it is sent
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
 @app.middleware("http")
 async def privacy_and_csrf(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
@@ -73,6 +89,8 @@ async def privacy_and_csrf(request: Request, call_next):
     elif request.url.path.startswith(("/assets/", "/js/")):
         # Without this the browser guesses a lifetime and can pair a fresh page with a stale stylesheet or script.
         response.headers["Cache-Control"] = "no-cache"
+    if request.url.path == "/":
+        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
     return response
 
 

@@ -1,6 +1,8 @@
 """Tests use disposable databases and synthetic identities. No Google network calls."""
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -64,6 +66,22 @@ def test_private_routes_require_login_and_do_not_cache(client):
     assert client.post("/api/feedback", json={"rating": 5}).status_code == 401
     assert client.get("/.env").status_code == 404
     assert client.get("/api/not-a-route").status_code == 404
+
+
+def test_page_sends_a_strict_content_security_policy(client):
+    policy = client.get("/").headers["content-security-policy"]
+    assert "default-src 'self'" in policy and "frame-ancestors 'none'" in policy
+    assert "unsafe-inline" not in policy and "unsafe-eval" not in policy
+    # Only the page carries it: the development API pages load their scripts from a CDN.
+    assert "content-security-policy" not in client.get("/docs").headers
+    assert "content-security-policy" not in client.get("/api/health").headers
+    # The policy refuses inline scripts, inline handlers and style attributes, so the frontend must not rely on any.
+    frontend = Path(main.FRONTEND_DIR)
+    for path in [frontend / "index.html", *sorted((frontend / "js").glob("*.js"))]:
+        text = path.read_text(encoding="utf-8")
+        assert "style=" not in text and "<style" not in text, path.name
+    page = (frontend / "index.html").read_text(encoding="utf-8")
+    assert not re.search(r"<script(?![^>]*\bsrc=)", page) and not re.search(r"\son[a-z]+=", page)
 
 
 def test_first_login_onboarding_and_profile_survives_reload(client):
