@@ -92,7 +92,7 @@ export class TrendChart {
         const last = i === n - 1;
         svg.append(el("circle", { cx: x(i), cy: y(v), r: 4, fill: last ? s.color : "#fff", stroke: s.color, "stroke-width": 2 }));
       });
-      labels.push({ y: y(s.values[n - 1]), text: Math.round(s.values[n - 1]) });
+      labels.push({ y: y(s.values[n - 1]), text: valueFormat.format(s.values[n - 1]) });
     }
     // Direct label on the latest value, in text ink; nudge apart when two series sit close.
     labels.sort((a, b) => a.y - b.y);
