@@ -25,7 +25,10 @@ const METRICS = [
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
 const LEVELS = { safe: "Trong ngưỡng an toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
 const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Đo lại vào lần sau và ghi chép đều đặn.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
-const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu" };
+const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu", document: "Từ giấy tờ" };
+// Readings copied from a scanned document are history: dated by the document and never the current state.
+const fromDocument = record => (record.vitals?.source || record.measurement_source) === "document";
+const when = record => date(record.created_at, !fromDocument(record));
 const ZONES = {
   systolic: { min: 80, max: 200, zones: [[80, 140, "safe"], [140, 180, "attention"], [180, 200, "alert"]] },
   heart_rate: { min: 30, max: 170, zones: [[30, 40, "alert"], [40, 50, "attention"], [50, 110, "safe"], [110, 150, "attention"], [150, 170, "alert"]] },
@@ -444,7 +447,7 @@ function renderTrends() {
   }
 }
 function pickCurrent(rows) {
-  return rows[0] || null;
+  return rows.find(row => !fromDocument(row)) || null;
 }
 async function refreshRecords() {
   const epoch = state.authEpoch;
@@ -465,7 +468,7 @@ async function refreshRecords() {
 }
 function recentEmergency() {
   const since = Date.now() - 24 * 60 * 60 * 1000;
-  return state.records.find(row => recordLevel(row) === "emergency" && toDate(row.created_at).getTime() >= since) || null;
+  return state.records.find(row => !fromDocument(row) && recordLevel(row) === "emergency" && toDate(row.created_at).getTime() >= since) || null;
 }
 function recordLevel(record) {
   const v = record.vitals || {};
@@ -481,7 +484,7 @@ function renderHistory() {
   $("#history-list").innerHTML = '<table class="history-table"><thead><tr><th>Thời gian</th><th>Chỉ số</th><th>Kết quả</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead><tbody>' + records.map(record => {
     const readings = METRICS.filter(m => record.vitals[m.key] != null).map(m => withUnit(valueOf(m.key, record.vitals), m.unit)).join(", ");
     const level = recordLevel(record);
-    return "<tr><td>" + esc(date(record.created_at)) + '<span class="source">' + esc(SOURCE_NAMES[record.vitals.source || "manual"]) + "</span></td><td>" + esc(readings) + '</td><td><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + '</span></td><td><button class="link-button" data-record="' + esc(record.id) + '">Xem chi tiết</button></td></tr>';
+    return "<tr><td>" + esc(when(record)) + '<span class="source">' + esc(SOURCE_NAMES[record.vitals.source || "manual"]) + "</span></td><td>" + esc(readings) + '</td><td><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + '</span></td><td><button class="link-button" data-record="' + esc(record.id) + '">Xem chi tiết</button></td></tr>';
   }).join("") + "</tbody></table>";
 }
 async function deleteAssessment(id) {
@@ -501,7 +504,7 @@ async function showResult(id) {
     const r = await reader().assessment(id);
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
-    $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
+    $("#result-detail").innerHTML = '<p class="note">' + (fromDocument(r) ? "Ghi trên giấy tờ ngày " + when(r) : "Đo lúc " + when(r) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase())) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
     $("#delete-assessment").dataset.id = r.id;
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
@@ -700,7 +703,7 @@ function renderReport() {
     (rows.length ? "<h2>IV. Biểu đồ diễn biến</h2><div class=\"report-charts\">" + Object.keys(TRENDS).map(id => '<figure data-report-chart="' + id + '"><figcaption></figcaption><div class="trend-chart"></div></figure>').join("") + '</div><p class="report-small">Đường liền: tâm thu hoặc chỉ số chính. Đường đứt: tâm trương. Nền xám hoặc đường chấm: ngưỡng tham khảo.</p>' +
       "<h2>V. Bảng số đo chi tiết</h2>" +
       '<table class="report-table report-num"><thead><tr><th>Thời gian</th><th>Huyết áp (mmHg)</th><th>Nhịp tim (lần/phút)</th><th>SpO₂ (%)</th><th>Đường huyết (mg/dL)</th><th>Nguồn</th><th>Ghi chú</th></tr></thead><tbody>' +
-      rows.slice().reverse().map(row => "<tr><td>" + esc(date(row.created_at)) + "</td><td>" + cell("systolic", row.vitals) + "</td><td>" + cell("heart_rate", row.vitals) + "</td><td>" + cell("spo2", row.vitals) + "</td><td>" + cell("glucose", row.vitals) + "</td><td>" + esc(SOURCE_NAMES[row.vitals.source || "manual"]) + "</td><td>" + mark(row.vitals) + "</td></tr>").join("") + "</tbody></table>" : "") +
+      rows.slice().reverse().map(row => "<tr><td>" + esc(when(row)) + "</td><td>" + cell("systolic", row.vitals) + "</td><td>" + cell("heart_rate", row.vitals) + "</td><td>" + cell("spo2", row.vitals) + "</td><td>" + cell("glucose", row.vitals) + "</td><td>" + esc(SOURCE_NAMES[row.vitals.source || "manual"]) + "</td><td>" + mark(row.vitals) + "</td></tr>").join("") + "</tbody></table>" : "") +
     '<p class="report-notice report-end">' + notice + " Ngưỡng tham khảo dùng trong phiếu là ngưỡng minh họa của ứng dụng. Hãy mang phiếu này đến bác sĩ để được tư vấn.</p>";
   for (const [id, spec] of Object.entries(TRENDS)) {
     const figure = $('[data-report-chart="' + id + '"]');
@@ -827,8 +830,88 @@ function renderMedicalRecords() {
   $("#medical-record-list").innerHTML = state.medicalRecords.map(record => {
     const a = record.analysis;
     const notable = (a.metrics || []).filter(metric => !["normal", "unknown"].includes(metric.flag)).length;
-    return '<article class="panel medical-record"><div class="record-meta"><span>' + esc(DOCUMENT_TYPES[a.document_type] || "Tài liệu sức khỏe") + "</span><span>" + esc(a.document_date ? date(a.document_date, false) : date(record.created_at, false)) + "</span>" + (notable ? '<span class="tag attention">' + notable + " mục cần xem lại</span>" : "") + "</div><h2>" + esc(a.title) + "</h2><p>" + esc(a.summary) + '</p><details class="record-details"><summary>Xem nội dung đã lưu</summary>' + analysisMarkup(a) + '</details><div class="record-actions"><button class="delete-record" data-delete-record="' + esc(record.id) + '">Xóa</button></div></article>';
+    return '<article class="panel medical-record"><div class="record-meta"><span>' + esc(DOCUMENT_TYPES[a.document_type] || "Tài liệu sức khỏe") + "</span><span>" + esc(a.document_date ? date(a.document_date, false) : date(record.created_at, false)) + "</span>" + (notable ? '<span class="tag attention">' + notable + " mục cần xem lại</span>" : "") + "</div><h2>" + esc(a.title) + "</h2><p>" + esc(a.summary) + '</p><details class="record-details"><summary>Xem nội dung đã lưu</summary>' + analysisMarkup(a) + '</details><div class="record-actions"><button class="link-button hidden" data-view-scan="' + esc(record.id) + '">Xem ảnh gốc</button><button class="delete-record" data-delete-record="' + esc(record.id) + '">Xóa</button></div></article>';
   }).join("");
+  // The button appears only where this device still holds the scan.
+  $$("[data-view-scan]").forEach(async button => { if (await scanRequest("readonly", store => store.getKey(button.dataset.viewScan))) button.classList.remove("hidden"); });
+}
+
+// Scans stay on this device: IndexedDB, keyed by the saved record's id. They are never sent back to the server.
+// ponytail: scans are not removed at sign-out, so the next user of a shared browser could reach them with
+// developer tools; clear the store at sign-out if shared devices become a real use.
+function scanRequest(mode, run) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("genesense-scans", 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("scans");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const request = run(open.result.transaction("scans", mode).objectStore("scans"));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    };
+  }).catch(() => null); // private windows and blocked storage: the app works, only without the kept scan
+}
+async function viewScan(id) {
+  const blob = await scanRequest("readonly", store => store.get(id));
+  if (!blob) { toast("Ảnh gốc không còn trên thiết bị này.", "error"); return; }
+  if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
+  state.scanUrl = URL.createObjectURL(blob);
+  $("#scan-image").src = state.scanUrl;
+  $("#scan-open").href = state.scanUrl;
+  $("#scan-dialog").showModal();
+}
+// Phone photos are far larger than reading needs; 2000px keeps small print legible and fits the hosting upload limit.
+async function shrinkImage(file, max = 2000) {
+  try {
+    const image = await createImageBitmap(file);
+    const k = Math.min(1, max / Math.max(image.width, image.height)), canvas = document.createElement("canvas");
+    canvas.width = Math.round(image.width * k); canvas.height = Math.round(image.height * k);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.85)) || file;
+  } catch { return file; }
+}
+
+const APPLY_VITALS = [["systolic", "Huyết áp tâm thu (mmHg)", 50, 260], ["diastolic", "Huyết áp tâm trương (mmHg)", 30, 180], ["heart_rate", "Nhịp tim (lần/phút)", 20, 260], ["spo2", "Oxy trong máu SpO₂ (%)", 50, 100], ["glucose", "Đường huyết (mg/dL)", 20, 600]];
+// The part of a scanned document that can go into the profile. Only what is new is offered.
+function applyMarkup(analysis) {
+  const vitals = analysis.vitals || {}, found = APPLY_VITALS.filter(([key]) => vitals[key] != null);
+  const name = key => CONDITIONS.find(([id]) => id === key)?.[1];
+  const own = (analysis.own_conditions || []).filter(key => !state.health.profile.known_conditions.includes(key));
+  const family = (analysis.family_conditions || []).filter(item => !state.health.family_history.find(row => row.member_id === item.member)?.conditions.includes(item.condition));
+  if (!found.length && !own.length && !family.length) return '<p class="note">Không thấy chỉ số huyết áp, nhịp tim, đường huyết, bệnh đã chẩn đoán hay tiền sử gia đình mới để đưa vào hồ sơ. Nội dung giấy tờ vẫn được lưu.</p>';
+  const check = (attribute, label) => '<label class="check-label"><input type="checkbox" ' + attribute + ' checked><span>' + label + "</span></label>";
+  return '<h3>Đưa vào hồ sơ</h3><p class="note">Bỏ chọn mục bạn không muốn đưa vào. Sửa lại số nếu AI đọc sai.</p>' +
+    (found.length ? '<fieldset class="apply-group"><legend>Chỉ số đo</legend>' + check('id="apply-vitals"', "Thêm vào Lịch sử đo với nguồn “Từ giấy tờ”<small>Số liệu trên giấy tờ là số liệu cũ, không thay đổi tình trạng ở trang Hôm nay.</small>") +
+      '<div class="field-grid">' + found.map(([key, label, min, max]) => "<label>" + label + '<input type="number" inputmode="decimal" step=".1" min="' + min + '" max="' + max + '" data-apply-vital="' + key + '" value="' + esc(vitals[key]) + '"></label>').join("") +
+      '<label>Ngày ghi trên giấy tờ<input type="date" id="apply-date" required max="' + new Date().toLocaleDateString("sv") + '" value="' + esc(analysis.document_date || "") + '"></label></div></fieldset>' : "") +
+    (own.length ? '<fieldset class="apply-group"><legend>Bệnh đã được chẩn đoán</legend>' + own.map(key => check('data-apply-own="' + esc(key) + '"', esc(name(key)))).join("") + "</fieldset>" : "") +
+    (family.length ? '<fieldset class="apply-group"><legend>Tiền sử gia đình</legend>' + family.map(item => check('data-apply-family="' + esc(item.member + "|" + item.condition) + '"', esc(MEMBERS.find(m => m.id === item.member).label + ": " + name(item.condition)))).join("") + "</fieldset>" : "");
+}
+// Runs after the document itself is saved. Profile changes repeat safely; the reading is last, so a retry cannot add it twice.
+async function applyDocument() {
+  const form = $("#document-apply");
+  const own = [...form.querySelectorAll("[data-apply-own]:checked")].map(el => el.dataset.applyOwn);
+  const family = [...form.querySelectorAll("[data-apply-family]:checked")].map(el => el.dataset.applyFamily.split("|"));
+  if (own.length || family.length) {
+    const health = structuredClone(state.health);
+    health.profile.known_conditions = [...new Set([...health.profile.known_conditions, ...own])];
+    for (const [id, condition] of family) {
+      const member = MEMBERS.find(m => m.id === id);
+      let row = health.family_history.find(item => item.member_id === id);
+      if (!row) health.family_history.push(row = { member_id: id, relation: member.relation, side: member.side, conditions: [] });
+      row.knowledge = "known"; row.conditions = [...new Set([...row.conditions, condition])];
+    }
+    const data = await api.saveProfile(health);
+    state.health = data.health; state.user = data.user;
+    await refreshRisk();
+  }
+  if (form.querySelector("#apply-vitals")?.checked) {
+    const vitals = Object.fromEntries([...form.querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
+    await api.assess({ vitals, source: "document", measured_on: $("#apply-date").value });
+    await refreshRecords();
+  }
 }
 
 async function refreshMedicalRecords() {
@@ -847,7 +930,8 @@ async function refreshMedicalRecords() {
 function resetMedicalUpload() {
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.previewUrl = null;
-  state.pendingMedical = null;
+  state.pendingMedical = null; state.pendingScan = null;
+  $("#document-apply").innerHTML = "";
   $("#medical-document-file").value = "";
   $("#document-ai-consent").checked = false;
   $("#confirm-medical-record").checked = false;
@@ -905,15 +989,17 @@ async function analyzeMedicalDocument() {
   button.disabled = true;
   button.textContent = "Đang đọc ảnh…";
   errorAt("#document-error");
-  const body = new FormData();
-  body.append("file", file);
-  body.append("consent", "true");
   const epoch = state.authEpoch;
   try {
+    const scan = await shrinkImage(file);
+    const body = new FormData();
+    body.append("file", scan, scan.name || "scan.jpg");
+    body.append("consent", "true");
     const result = await api.analyzeMedicalRecord(body);
     if (epoch !== state.authEpoch) return;
-    state.pendingMedical = result;
+    state.pendingMedical = result; state.pendingScan = scan;
     $("#document-analysis-preview").innerHTML = analysisMarkup(result.analysis) + '<p class="privacy-result">' + esc(result.privacy_note) + "</p>";
+    $("#document-apply").innerHTML = applyMarkup(result.analysis);
     $("#upload-stage").classList.add("hidden");
     $("#review-stage").classList.remove("hidden");
   } catch (error) { errorAt("#document-error", error.message); }
@@ -922,6 +1008,10 @@ async function analyzeMedicalDocument() {
 
 async function saveMedicalRecord() {
   if (!state.pendingMedical || !$("#confirm-medical-record").checked || state.busy) return;
+  // Unticked readings are not sent, so their fields must not block saving.
+  const applyVitals = $("#apply-vitals")?.checked;
+  $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !applyVitals; });
+  if (!$("#document-apply").reportValidity()) return;
   state.busy = true;
   const button = $("#save-medical-record");
   const original = button.innerHTML;
@@ -932,6 +1022,8 @@ async function saveMedicalRecord() {
     const saved = await api.saveMedicalRecord({ analysis: state.pendingMedical.analysis, document_hash: state.pendingMedical.document_hash, health_consent: true });
     if (epoch !== state.authEpoch) return;
     state.medicalRecords = [saved, ...state.medicalRecords.filter(record => record.id !== saved.id)];
+    if (state.pendingScan) await scanRequest("readwrite", store => store.put(state.pendingScan, saved.id));
+    await applyDocument();
     closeDialog($("#medical-upload-dialog"));
     renderMedicalRecords();
     navigate("records");
@@ -944,6 +1036,7 @@ async function deleteMedicalRecord(id) {
   if (!await confirmAction("Xóa giấy tờ này?")) return;
   try {
     await api.deleteMedicalRecord(id);
+    await scanRequest("readwrite", store => store.delete(id));
     state.medicalRecords = state.medicalRecords.filter(record => record.id !== id);
     renderMedicalRecords();
     toast("Đã xóa giấy tờ.");
@@ -1215,6 +1308,8 @@ function bindEvents() {
     if (record) showResult(record.dataset.record);
     const deleteRecord = event.target.closest("[data-delete-record]");
     if (deleteRecord) deleteMedicalRecord(deleteRecord.dataset.deleteRecord);
+    const scan = event.target.closest("[data-view-scan]");
+    if (scan) viewScan(scan.dataset.viewScan);
     if (event.target.closest("[data-open-upload]")) openMedicalUpload();
     const viewTarget = event.target.closest("[data-view-patient]");
     if (viewTarget) viewPatient(viewTarget.dataset.viewPatient);
@@ -1240,6 +1335,10 @@ function bindEvents() {
   $("#analyze-another").addEventListener("click", resetMedicalUpload);
   $("#confirm-medical-record").addEventListener("change", event => { $("#save-medical-record").disabled = !event.target.checked || state.busy; });
   $("#save-medical-record").addEventListener("click", saveMedicalRecord);
+  $("#document-apply").addEventListener("submit", event => event.preventDefault());
+  $("#document-apply").addEventListener("change", event => {
+    if (event.target.id === "apply-vitals") $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !event.target.checked; });
+  });
   $("#medical-upload-dialog").addEventListener("close", resetMedicalUpload);
   $$("[data-measure-mode]").forEach(button => button.addEventListener("click", () => setMeasureMode(button.dataset.measureMode)));
   $("#measurement-dialog").addEventListener("close", stopStreams);

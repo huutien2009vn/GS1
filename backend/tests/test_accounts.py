@@ -323,6 +323,7 @@ def test_medical_document_requires_review_then_is_account_scoped(client, monkeyp
     assert analyzed.status_code == 200
     assert analyzed.json()["analysis"]["review_required"] is True
     assert "không được ghi" in analyzed.json()["privacy_note"]
+    assert analyzed.json()["analysis"]["vitals"]["systolic"] is None  # nothing invented when the AI found none
     assert client.get("/api/medical-records").json() == []
 
     saved = client.post("/api/medical-records", json={
@@ -350,6 +351,42 @@ def test_medical_document_requires_review_then_is_account_scoped(client, monkeyp
     login(client)
     assert client.get("/api/medical-records").json() == []
     assert client.delete("/api/medical-records/" + record_id).status_code == 404
+
+
+def test_document_reading_is_dated_history_and_never_the_current_state(client):
+    login(client)
+    client.put("/api/profile", json=PROFILE)
+    home = client.post("/api/assessments", json=MEASUREMENT).json()
+    risk_before = client.get("/api/risk").json()
+    dangerous = {"vitals": {"systolic": 190, "diastolic": 125}, "source": "document", "measured_on": "2024-03-15"}
+    saved = client.post("/api/assessments", json=dangerous)
+    assert saved.status_code == 201
+    assert saved.json()["measurement_source"] == "document" and saved.json()["created_at"].startswith("2024-03-15T12:00")
+    history = client.get("/api/assessments").json()
+    assert [row["id"] for row in history] == [home["id"], saved.json()["id"]]  # sorted by the printed date
+    assert history[1]["vitals"]["source"] == "document"
+    # Without a printed date it is stored as of now, and still does not replace the home reading in the live score.
+    assert client.post("/api/assessments", json=dangerous | {"measured_on": None}).status_code == 201
+    assert client.get("/api/risk").json()["scores"] == risk_before["scores"]
+    assert client.post("/api/assessments", json=dangerous | {"measured_on": "2999-01-01"}).status_code == 422
+    assert client.post("/api/assessments", json=MEASUREMENT | {"measured_on": "2024-03-15"}).status_code == 422
+
+
+def test_document_analysis_keeps_only_known_structured_values():
+    from backend.app.services.ai_service import MEDICAL_DOCUMENT_SCHEMA, _gemini_schema, _medical_analysis_from_json
+    import json
+    analysis = _medical_analysis_from_json(json.dumps({
+        "document_type": "discharge_note", "document_date": "", "provider": "", "title": "Giấy ra viện", "summary": "Tóm tắt",
+        "metrics": [], "conditions": ["Tăng huyết áp"], "medications": [], "recommendations": [], "warnings": [],
+        "confidence": "medium", "review_required": True, "source": "ai", "disclaimer": "",
+        "vitals": {"systolic": 150, "diastolic": 95, "heart_rate": 0, "spo2": None, "glucose": "cao"},
+        "own_conditions": ["hypertension", "hypertension", "flu"],
+        "family_conditions": [{"member": "father", "condition": "stroke"}, {"member": "uncle", "condition": "stroke"}],
+    }))
+    assert analysis.vitals.model_dump() == {"systolic": 150, "diastolic": 95, "heart_rate": None, "spo2": None, "glucose": None}
+    assert analysis.own_conditions == ["hypertension"]
+    assert [(item.member, item.condition) for item in analysis.family_conditions] == [("father", "stroke")]
+    assert _gemini_schema(MEDICAL_DOCUMENT_SCHEMA)["properties"]["vitals"]["properties"]["systolic"]["type"] == "number"
 
 
 def test_medical_document_validation(client):

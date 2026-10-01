@@ -40,6 +40,17 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
+def from_document(vitals: dict) -> bool:
+    """Readings copied from a scanned document are history: they never count as the person's current state."""
+    return (vitals or {}).get("source") == "document"
+
+
+async def current_vital_score(user_id: str, session: AsyncSession) -> float | None:
+    rows = await session.execute(select(Assessment.vital_score, Assessment.vitals).where(Assessment.user_id == user_id)
+                                 .order_by(Assessment.created_at.desc()).limit(30))
+    return next((score for score, vitals in rows if not from_document(vitals)), None)
+
+
 async def linked_patient(patient_id: str, user: User, session: AsyncSession) -> User:
     """Return the patient only when an active link gives this user access. 404 hides whether the id exists."""
     link = await session.scalar(select(CareLink).where(CareLink.patient_id == patient_id, CareLink.caregiver_id == user.id))
@@ -101,8 +112,9 @@ async def list_links(user: User = Depends(current_user), session: AsyncSession =
     for link in links:
         if link.caregiver_id == user.id:
             patient = await session.get(User, link.patient_id)
-            rows = list(await session.scalars(select(Assessment).where(Assessment.user_id == patient.id)
-                                              .order_by(Assessment.created_at.desc()).limit(30)))
+            rows = [row for row in await session.scalars(select(Assessment).where(Assessment.user_id == patient.id)
+                                                         .order_by(Assessment.created_at.desc()).limit(30))
+                    if not from_document(row.vitals)]
             danger = next((row for row in rows if _aware(row.created_at) >= since
                            and any(alert.get("severity") == "alert" for alert in row.result.get("alerts", []))), None)
             latest = rows[0] if rows else None
@@ -143,9 +155,7 @@ async def patient_risk(patient_id: str, user: User = Depends(current_user), sess
     patient = await linked_patient(patient_id, user, session)
     if not patient.health_profile:
         raise HTTPException(404, "Không tìm thấy hồ sơ được chia sẻ.")
-    vital_score = await session.scalar(select(Assessment.vital_score).where(Assessment.user_id == patient.id)
-                                       .order_by(Assessment.created_at.desc()).limit(1))
-    return risk_overview(AccountProfile.model_validate(patient.health_profile), vital_score)
+    return risk_overview(AccountProfile.model_validate(patient.health_profile), await current_vital_score(patient.id, session))
 
 
 @router.get("/patients/{patient_id}/assessments", response_model=list[AssessmentHistoryItem])
