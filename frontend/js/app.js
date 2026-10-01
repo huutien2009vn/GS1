@@ -246,7 +246,14 @@ async function nextStep(event) {
 function rangeBar(key, value) {
   const scale = ZONES[key];
   const pos = v => ((Math.min(scale.max, Math.max(scale.min, v)) - scale.min) / (scale.max - scale.min) * 100).toFixed(1);
-  return '<div class="range" aria-hidden="true">' + scale.zones.map(([from, to, level]) => '<span class="range-zone ' + level + '" style="left:' + pos(from) + "%;width:" + (pos(to) - pos(from)).toFixed(1) + '%"></span>').join("") + '<span class="range-mark" style="left:' + pos(value) + '%"></span></div>';
+  // Positions travel as data attributes and are applied by placeRanges(): the Content-Security-Policy blocks style attributes.
+  return '<div class="range" aria-hidden="true">' + scale.zones.map(([from, to, level]) => '<span class="range-zone ' + level + '" data-left="' + pos(from) + '" data-width="' + (pos(to) - pos(from)).toFixed(1) + '"></span>').join("") + '<span class="range-mark" data-left="' + pos(value) + '"></span></div>';
+}
+function placeRanges(root) {
+  root.querySelectorAll("[data-left]").forEach(el => {
+    el.style.left = el.dataset.left + "%";
+    if (el.dataset.width) el.style.width = el.dataset.width + "%";
+  });
 }
 function renderMetrics() {
   const values = state.result?.measured_vitals || {};
@@ -256,6 +263,7 @@ function renderMetrics() {
     const flag = level === "attention" || level === "alert" ? '<span class="reading-flag flag-' + level + '">' + status + "</span>" : "";
     return '<div class="reading"><span class="reading-name">' + m.label + "</span>" + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></span>" + rangeBar(m.key, values[m.key]) : '<span class="reading-value empty">Chưa đo</span>') + flag + "</div>";
   }).join("");
+  placeRanges($("#metric-grid"));
 }
 // Stock photos (Pexels, self-hosted) chosen by the tip's topic; order matters ("thuốc lá" before generic words).
 const TIP_IMAGES = [
@@ -422,7 +430,7 @@ async function showResult(id) {
     const r = await reader().assessment(id);
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
-    $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p style="margin-top:16px"><a class="btn primary" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p style="margin-top:16px">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
+    $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
     $("#delete-assessment").dataset.id = r.id;
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
@@ -984,8 +992,13 @@ async function saveMeasurement(values, source, samples = []) {
     // The new reading was scored against the current profile, so its scores are the live ones.
     if (state.risk) state.risk.scores = r.scores;
     renderDashboard(); renderHistory(); navigate("dashboard");
-    if (isEmergency(r)) $("#emergency-title").focus();
-    else toast("Đã lưu chỉ số.");
+    if (isEmergency(r)) {
+      // Focus can move only after the dialog has really closed: while it is open the page behind it is inert,
+      // and on closing the browser hands focus back to the button that opened it, which is now hidden.
+      const dialog = $("#measurement-dialog");
+      const focusTitle = () => $("#emergency-title").focus();
+      if (dialog.open) dialog.addEventListener("close", focusTitle, { once: true }); else focusTitle();
+    } else toast("Đã lưu chỉ số.");
   } catch (error) { errorAt("#measurement-error", error.message); }
   finally { state.busy = false; button.disabled = false; button.innerHTML = original; if (source !== "manual") renderDevice(); }
 }

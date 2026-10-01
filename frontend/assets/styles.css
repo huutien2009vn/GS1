@@ -407,6 +407,7 @@ details[open]::details-content { block-size: auto; }
 .device-values > div:last-child { border-bottom: 0; }
 .device-values strong { font-variant-numeric: tabular-nums; }
 #disconnect-device { margin-top: 8px; }
+.detail-gap { margin-top: 16px; }
 .result-detail-vitals { border: 1px solid var(--line); border-radius: var(--radius); padding: 0 16px; margin: 16px 0; }
 .result-detail-vitals > div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .result-detail-vitals > div:last-child { border-bottom: 0; }
