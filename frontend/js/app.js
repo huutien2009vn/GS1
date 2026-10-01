@@ -483,9 +483,9 @@ function renderProfile() {
 // Doctor's report: an A4 page built from the user's own real readings, saved as PDF through the print dialog.
 // ponytail: uses the readings already loaded (latest 100); add a date-range API if longer histories matter.
 const reportCharts = {};
-function reportRows(days) {
+function reportRows(days, withSample = false) {
   const since = Date.now() - days * 86400000;
-  return state.records.filter(row => isReal(row) && toDate(row.created_at).getTime() >= since).reverse();
+  return state.records.filter(row => (withSample || isReal(row)) && toDate(row.created_at).getTime() >= since).reverse();
 }
 function reportSummary(rows) {
   const stat = (values, digits = 0) => values.length ? { n: values.length, avg: num(Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(digits))), min: num(Math.min(...values)), max: num(Math.max(...values)) } : null;
@@ -502,7 +502,10 @@ function reportSummary(rows) {
 }
 function renderReport() {
   const days = Number($("#report-days").value);
-  const rows = reportRows(days);
+  const withSample = $("#report-sample").checked;
+  const rows = reportRows(days, withSample);
+  const samples = rows.filter(row => !isReal(row)).length;
+  const hasSample = state.records.some(row => !isReal(row));
   const h = state.health, p = h.profile, now = new Date();
   const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const pad = n => String(n).padStart(2, "0");
@@ -520,6 +523,7 @@ function renderReport() {
   $("#report-sheet").innerHTML =
     '<header class="report-head"><div><strong>GeneSense</strong><br>Ứng dụng theo dõi sức khỏe tại nhà</div><div class="report-meta">Mã phiếu: ' + code + "<br>Ngày lập: " + esc(date(now.toISOString(), false)) + "</div></header>" +
     '<h1 id="report-title">PHIẾU TỔNG HỢP CHỈ SỐ SỨC KHỎE TẠI NHÀ</h1><p class="report-period">Kỳ báo cáo: ' + days + " ngày, đến ngày " + esc(date(now.toISOString(), false)) + '</p><p class="report-notice">' + notice + "</p>" +
+    (samples ? '<p class="report-notice">Phiếu này có ' + samples + " số đo là dữ liệu mẫu để dùng thử, không phải số đo thật. Các số đo này được ghi “Dữ liệu mẫu” ở cột Nguồn và có tính vào bảng tổng hợp, biểu đồ.</p>" : "") +
     "<h2>I. Thông tin người dùng</h2>" +
     '<table class="report-table report-info"><tbody><tr><th>Họ tên</th><td>' + esc(h.display_name) + "</td><th>Tuổi</th><td>" + p.age + "</td><th>Giới tính</th><td>" + sex + "</td></tr>" +
     "<tr><th>Chiều cao</th><td>" + num(p.height_cm) + " cm</td><th>Cân nặng</th><td>" + num(p.weight_kg) + " kg</td><th>BMI</th><td>" + num(bmi) + " (" + bmiLabel(bmi) + ")</td></tr>" +
@@ -528,7 +532,7 @@ function renderReport() {
     "<h2>II. Tiền sử bệnh trong gia đình</h2>" +
     '<table class="report-table"><thead><tr><th>Người thân</th><th>Bệnh đã biết</th></tr></thead><tbody>' + family + "</tbody></table>" +
     "<h2>III. Tổng hợp trong kỳ</h2>" +
-    (rows.length ? '<table class="report-table report-num"><thead><tr><th>Chỉ số</th><th>Đơn vị</th><th>Số lần đo</th><th>Trung bình</th><th>Thấp nhất</th><th>Cao nhất</th><th>Số lần ngoài ngưỡng</th></tr></thead><tbody>' + reportSummary(rows) + "</tbody></table>" : "<p>Không có số đo trong kỳ này. Dữ liệu mẫu không được đưa vào phiếu.</p>") +
+    (rows.length ? '<table class="report-table report-num"><thead><tr><th>Chỉ số</th><th>Đơn vị</th><th>Số lần đo</th><th>Trung bình</th><th>Thấp nhất</th><th>Cao nhất</th><th>Số lần ngoài ngưỡng</th></tr></thead><tbody>' + reportSummary(rows) + "</tbody></table>" : "<p>Không có số đo trong kỳ này." + (hasSample && !withSample ? " Dữ liệu mẫu chưa được đưa vào phiếu. Chọn “Gồm dữ liệu mẫu” để thêm." : "") + "</p>") +
     (rows.length ? "<h2>IV. Biểu đồ diễn biến</h2><div class=\"report-charts\">" + Object.keys(TRENDS).map(id => '<figure data-report-chart="' + id + '"><figcaption></figcaption><div class="trend-chart"></div></figure>').join("") + '</div><p class="report-small">Đường liền: tâm thu hoặc chỉ số chính. Đường đứt: tâm trương. Nền xám hoặc đường chấm: ngưỡng tham khảo.</p>' +
       "<h2>V. Bảng số đo chi tiết</h2>" +
       '<table class="report-table report-num"><thead><tr><th>Thời gian</th><th>Huyết áp (mmHg)</th><th>Nhịp tim (lần/phút)</th><th>SpO₂ (%)</th><th>Đường huyết (mg/dL)</th><th>Nguồn</th><th>Ghi chú</th></tr></thead><tbody>' +
@@ -546,7 +550,13 @@ function renderReport() {
       series: spec.series.map(([key, label], index) => ({ label, color: "#000", dash: index ? "6 4" : "", values: points.map(row => row.vitals[key]) })) });
   }
 }
-function openReport() { screen("report"); document.title = "Phiếu tổng hợp - GeneSense"; renderReport(); }
+function openReport() {
+  screen("report"); document.title = "Phiếu tổng hợp - GeneSense";
+  // Sample readings stay out of the sheet unless asked for; they are on by default only when there is nothing real to show.
+  $("#report-sample-option").classList.toggle("hidden", !state.records.some(row => !isReal(row)));
+  $("#report-sample").checked = state.records.length > 0 && !state.records.some(isReal);
+  renderReport();
+}
 
 // Family sharing. While viewing a relative, the same screens render that person's data read-only:
 // state is swapped, writes are hidden (.own-only) and guarded, and reads go through the care endpoints.
@@ -1038,6 +1048,7 @@ function bindEvents() {
   $("#refresh-history").addEventListener("click", refreshRecords);
   $("#open-report").addEventListener("click", openReport);
   $("#report-days").addEventListener("change", renderReport);
+  $("#report-sample").addEventListener("change", renderReport);
   $("#report-print").addEventListener("click", () => window.print());
   $("#report-back").addEventListener("click", () => { screen("app"); navigate("history"); });
   $("#history-filter").addEventListener("change", renderHistory);
