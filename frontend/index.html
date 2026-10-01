@@ -126,6 +126,10 @@
           <div class="section-heading"><h2 id="latest-title">Chỉ số gần nhất</h2><p id="measurement-context" class="note"></p></div>
           <div id="metric-grid" class="panel reading-list"></div>
         </section>
+        <section id="today-advice" class="section" aria-labelledby="today-advice-title">
+          <div class="section-heading"><h2 id="today-advice-title">Lời khuyên cho bạn</h2></div>
+          <div id="today-tips" class="tip-grid"></div>
+        </section>
         <section id="care-patients-section" class="section own-only hidden" aria-labelledby="care-patients-title">
           <div class="section-heading"><h2 id="care-patients-title">Người thân bạn đang theo dõi</h2></div>
           <div id="care-patients" class="panel care-list"></div>
@@ -133,12 +137,8 @@
       </section>
 
       <section id="history-view" class="view hidden">
-        <div class="page-heading"><h1>Lịch sử đo</h1><div class="heading-actions"><button class="btn outline" id="refresh-history">Tải lại</button><button class="btn primary" id="open-report">Lập phiếu tổng hợp</button></div></div>
-        <section class="section advice" aria-labelledby="advice-title">
-          <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2></div>
-          <div id="tip-list" class="tip-grid"></div>
-          <p id="follow-up" class="follow-up hidden"></p>
-        </section>
+        <div class="page-heading"><h1>Lịch sử đo</h1><div class="heading-actions"><button class="link-button" id="refresh-history">Tải lại</button><button class="btn primary" id="open-report">Lập phiếu tổng hợp</button></div></div>
+        <article class="panel"><div class="panel-heading"><h2>Các lần đo</h2><label class="inline-select">Hiển thị<select id="history-filter"><option value="all">Tất cả</option><option value="real">Dữ liệu của tôi</option><option value="simulation">Dữ liệu mẫu</option></select></label></div><div id="history-list"></div></article>
         <section class="section" aria-labelledby="trend-title">
           <div class="section-heading"><h2 id="trend-title">Diễn biến chỉ số</h2><p id="chart-context" class="note"></p></div>
           <div class="trend-grid">
@@ -149,7 +149,11 @@
           </div>
           <p class="note">Vùng nền xanh là ngưỡng an toàn tham khảo; với huyết áp, đường nét đứt là ngưỡng cao. Rê chuột hoặc dùng phím mũi tên trên biểu đồ để xem từng lần đo.</p>
         </section>
-        <article class="panel"><div class="panel-heading"><h2>Các lần đo</h2><label class="inline-select">Hiển thị<select id="history-filter"><option value="all">Tất cả</option><option value="real">Dữ liệu của tôi</option><option value="simulation">Dữ liệu mẫu</option></select></label></div><div id="history-list"></div></article>
+        <section class="section advice" aria-labelledby="advice-title">
+          <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2></div>
+          <div id="tip-list" class="tip-grid"></div>
+          <p id="follow-up" class="follow-up hidden"></p>
+        </section>
       </section>
 
       <section id="records-view" class="view hidden">
