@@ -859,7 +859,11 @@ async function viewScan(id) {
   if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
   state.scanUrl = URL.createObjectURL(blob);
   $("#scan-image").src = state.scanUrl;
-  $("#scan-open").href = state.scanUrl;
+  // "Lưu ảnh" hands the browser a file named after the document's date, so it can be found again outside the app.
+  const record = state.medicalRecords.find(item => item.id === id), save = $("#scan-save");
+  const day = record?.analysis.document_date || (record && toDate(record.created_at).toLocaleDateString("sv"));
+  save.href = state.scanUrl;
+  save.download = "giay-to" + (day ? "-" + day : "") + "." + ({ "image/png": "png", "image/webp": "webp" }[blob.type] || "jpg");
   $("#scan-dialog").showModal();
 }
 // Phone photos are far larger than reading needs; 2000px keeps small print legible and fits the hosting upload limit.
@@ -1204,7 +1208,7 @@ function clearAccount() {
   $("#viewing-banner").classList.add("hidden"); $("#viewing-text").textContent = "";
   setAvatar(null);
   if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
-  state.scanUrl = null; $("#scan-image").removeAttribute("src"); $("#scan-open").removeAttribute("href");
+  state.scanUrl = null; $("#scan-image").removeAttribute("src"); $("#scan-save").removeAttribute("href");
   state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#genetics-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";

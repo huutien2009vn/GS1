@@ -296,7 +296,7 @@ class AIInsightService:
             if last_status in {401, 403}:
                 raise AIServiceError("Khóa Gemini không hợp lệ, đã bị chặn hoặc chưa có quyền dùng Gemini API.")
             if last_status == 429:
-                raise AIServiceError("Gemini đã đạt giới hạn sử dụng. Hãy chờ một lúc hoặc kiểm tra quota trong AI Studio.")
+                raise AIServiceError("Tính năng đọc ảnh đang quá tải. Hãy thử lại sau ít phút.")
             if last_status in {500, 502, 503, 504}:
                 raise AIServiceError("Gemini đang quá tải. GeneSense đã thử lại và đổi model dự phòng nhưng chưa thành công.")
             if last_status == 404:

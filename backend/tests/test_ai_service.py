@@ -2,6 +2,7 @@ import asyncio
 import json
 
 import httpx
+import pytest
 
 from backend.app.config import Settings
 from backend.app.services import ai_service
@@ -32,6 +33,11 @@ def test_used_up_quota_goes_straight_to_the_fallback_model(monkeypatch):
                                         google_ai_model="primary", google_ai_fallback_model="fallback"))
     output = asyncio.run(service._gemini_generate(instruction="i", text="t", schema={"type": "object"}))
     assert output == "{}" and calls == ["primary:generateContent", "fallback:generateContent"]
+    # With no model left, the person scanning gets a plain message, not the provider's quota vocabulary.
+    exhausted = AIInsightService(Settings(ai_provider="google", google_ai_api_key="test-key",
+                                          google_ai_model="primary", google_ai_fallback_model="primary-too"))
+    with pytest.raises(ai_service.AIServiceError, match="Tính năng đọc ảnh đang quá tải"):
+        asyncio.run(exhausted._gemini_generate(instruction="i", text="t", schema={"type": "object"}))
 
 
 def test_gemini_schema_uses_cross_model_compatible_subset():
