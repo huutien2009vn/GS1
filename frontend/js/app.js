@@ -44,7 +44,7 @@ const levelOf = result => isEmergency(result) ? "emergency" : result.risk_level;
 const isReal = record => (record.vitals?.source || "manual") !== "simulation";
 const DOCUMENT_TYPES = { lab_result: "Kết quả xét nghiệm", prescription: "Đơn thuốc", discharge_note: "Giấy ra viện", imaging_report: "Kết quả chẩn đoán hình ảnh", vaccination: "Tiêm chủng", other: "Tài liệu sức khỏe" };
 const FLAG_NAMES = { normal: "Trong khoảng tham chiếu", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
-const state = { user: null, health: null, records: [], result: null, step: 0, editing: false, rating: 0,
+const state = { viewing: null, own: null, care: { patients: [], caregivers: [] }, user: null, health: null, records: [], result: null, step: 0, editing: false, rating: 0,
   medicalRecords: [], pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
   deviceSource: null, deviceValues: {}, deviceTimes: {}, samples: [], deviceEpoch: 0, authEpoch: 0, busy: false, view: "dashboard" };
 let ble = null;
@@ -72,9 +72,11 @@ function closeDialog(dialog) {
   dialog.addEventListener("animationend", done, { once: true });
   setTimeout(done, 250);
 }
-function confirmAction(title) {
+function confirmAction(title, body = "Không thể khôi phục sau khi xóa.", okLabel = "Xóa") {
   const dialog = $("#confirm-dialog");
   $("#confirm-title").textContent = title;
+  $("#confirm-body").textContent = body;
+  $("#confirm-ok").textContent = okLabel;
   dialog.showModal();
   return new Promise(resolve => dialog.addEventListener("close", () => resolve(dialog.returnValue === "yes"), { once: true }));
 }
@@ -114,14 +116,14 @@ function statusOf(key, v) {
 }
 function personalize() {
   $$("[data-user-name]").forEach(el => el.textContent = state.user.display_name);
-  $("#greeting").textContent = "Xin chào, " + state.user.display_name;
+  $("#greeting").textContent = state.viewing ? "Hồ sơ của " + state.viewing.name : "Xin chào, " + state.user.display_name;
   $("#demo-banner").classList.toggle("hidden", !state.user.is_demo);
   const today = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" }).format(new Date());
   $("#today-date").textContent = today.charAt(0).toUpperCase() + today.slice(1);
 }
 function navigate(view) {
   if (!state.user || !state.health) return;
-  state.view = ["dashboard", "records", "history", "profile"].includes(view) ? view : "dashboard";
+  state.view = ["dashboard", "records", "history", "profile"].includes(view) && !(state.viewing && view === "records") ? view : "dashboard";
   $$(".view").forEach(el => el.classList.toggle("hidden", el.id !== state.view + "-view"));
   $$("[data-nav]").forEach(button => {
     button.classList.toggle("active", button.dataset.nav === state.view);
@@ -229,7 +231,7 @@ async function nextStep(event) {
     state.editing = false;
     personalize();
     screen("app");
-    await refreshRecords();
+    await Promise.all([refreshRecords(), refreshCare()]);
     navigate(wasEditing ? "profile" : "dashboard");
     toast(wasEditing ? "Đã lưu hồ sơ." : "Đã lưu hồ sơ. Bạn có thể ghi chỉ số đầu tiên.");
   } catch (error) { errorAt("#onboarding-error", error.message); }
@@ -359,10 +361,10 @@ function pickCurrent(rows) {
 async function refreshRecords() {
   const epoch = state.authEpoch;
   try {
-    const rows = await api.history();
+    const rows = await reader().history();
     if (epoch !== state.authEpoch) return;
     const current = pickCurrent(rows);
-    const result = current ? await api.assessment(current.id) : null;
+    const result = current ? await reader().assessment(current.id) : null;
     if (epoch !== state.authEpoch) return;
     state.records = rows; state.result = result;
     renderDashboard(); renderHistory();
@@ -395,6 +397,7 @@ function renderHistory() {
   }).join("") + "</tbody></table>";
 }
 async function deleteAssessment(id) {
+  if (state.viewing) return;
   if (!id || !await confirmAction("Xóa lần đo này?")) return;
   try {
     await api.deleteAssessment(id);
@@ -407,7 +410,7 @@ async function deleteAssessment(id) {
 async function showResult(id) {
   const epoch = state.authEpoch;
   try {
-    const r = await api.assessment(id);
+    const r = await reader().assessment(id);
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
     $("#result-detail").innerHTML = '<p class="note">Đo lúc ' + date(r.created_at) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase()) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p style="margin-top:16px"><a class="btn primary" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p style="margin-top:16px">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
@@ -449,13 +452,13 @@ function renderProfile() {
   const youText = conditions.join(", ") || "Không khai báo bệnh";
   const notes = [["Bên nội", h.paternal_notes], ["Bên ngoại", h.maternal_notes]].filter(([, text]) => text);
   $("#profile-content").innerHTML =
-    '<article class="panel"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.user.email || "Hồ sơ mẫu") + '</p>' +
+    '<article class="panel"><h2>' + esc(h.display_name) + '</h2><p class="note">' + esc(state.viewing ? "Hồ sơ được chia sẻ, chỉ xem" : state.user.email || "Hồ sơ mẫu") + '</p>' +
     '<dl class="facts facts-2col">' +
       "<div><dt>Tuổi</dt><dd>" + p.age + "</dd></div><div><dt>Giới tính</dt><dd>" + sex + "</dd></div>" +
       "<div><dt>Chiều cao</dt><dd>" + p.height_cm + " cm</dd></div><div><dt>Cân nặng</dt><dd>" + p.weight_kg + " kg</dd></div>" +
       "<div><dt>BMI</dt><dd>" + num(bmi) + ' <span class="fact-note">' + bmiLabel(bmi) + "</span></dd></div><div><dt>Vận động</dt><dd>" + p.activity_minutes_week + " phút mỗi tuần</dd></div>" +
       "<div><dt>Bệnh đã chẩn đoán</dt><dd>" + esc(conditions.join(", ") || "Không khai báo") + "</dd></div><div><dt>Hút thuốc</dt><dd>" + (p.smoker ? "Có" : "Không") + "</dd></div>" +
-      "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>" +
+      (state.viewing ? "" : "<div><dt>Dùng AI giải thích kết quả</dt><dd>" + (h.ai_consent ? "Đã cho phép" : "Chưa cho phép") + "</dd></div>") +
     "</dl>" + (h.personal_notes ? "<h3>Ghi chú</h3><p>" + esc(h.personal_notes) + "</p>" : "") + "</article>" +
     '<article class="panel"><h2>Tiền sử bệnh trong gia đình</h2><div class="ft-summary">' + familySummary(h) + "</div>" +
     '<div class="family-tree" role="group" aria-label="Sơ đồ gia đình ba thế hệ">' +
@@ -539,6 +542,99 @@ function renderReport() {
 }
 function openReport() { screen("report"); document.title = "Phiếu tổng hợp - GeneSense"; renderReport(); }
 
+// Family sharing. While viewing a relative, the same screens render that person's data read-only:
+// state is swapped, writes are hidden (.own-only) and guarded, and reads go through the care endpoints.
+const reader = () => state.viewing
+  ? { history: () => api.careHistory(state.viewing.id), assessment: id => api.careAssessment(state.viewing.id, id) }
+  : api;
+async function refreshCare() {
+  const epoch = state.authEpoch;
+  try {
+    const care = await api.careLinks();
+    if (epoch !== state.authEpoch) return;
+    state.care = care;
+  } catch { /* sharing is optional; the rest of the app still works */ }
+  renderCare();
+}
+function patientLevel(patient) {
+  if (!patient.latest) return null;
+  const level = recordLevel({ vitals: patient.latest.vitals, risk_level: patient.latest.risk_level });
+  return level === "emergency" ? "emergency" : patient.recent_emergency_at ? "watch" : level;
+}
+function patientRow(patient) {
+  const level = patientLevel(patient);
+  const tag = level ? '<span class="tag ' + ({ emergency: "alert", watch: "attention" }[level] || level) + '">' + LEVELS[level] + "</span>" : '<span class="tag">Chưa có số đo</span>';
+  return '<div class="care-row"><div class="care-row-main"><strong>' + esc(patient.display_name) + "</strong><span>" + tag + (patient.latest ? ' <span class="note">Đo lúc ' + esc(date(patient.latest.created_at)) + "</span>" : "") + '</span></div><div class="care-row-actions"><button class="btn outline" data-view-patient="' + esc(patient.patient_id) + '">Xem hồ sơ</button><button class="delete-record" data-remove-link="' + esc(patient.link_id) + '" data-remove-kind="patient">Ngừng theo dõi</button></div></div>';
+}
+function renderCare() {
+  const { patients, caregivers } = state.care;
+  $("#care-alerts").innerHTML = patients.map(patient => {
+    const level = patientLevel(patient);
+    if (level !== "emergency" && level !== "watch") return "";
+    const when = date(level === "emergency" ? patient.latest.created_at : patient.recent_emergency_at);
+    return '<div class="care-alert ' + (level === "watch" ? "watch" : "") + '" role="alert"><span>' + esc(patient.display_name) + (level === "emergency" ? " có chỉ số ở mức nguy hiểm, đo lúc " : " đã có lần đo ở mức nguy hiểm lúc ") + esc(when) + '.</span><span class="care-alert-actions"><button class="btn" data-view-patient="' + esc(patient.patient_id) + '">Xem hồ sơ</button>' + (level === "emergency" ? '<a class="btn" href="tel:115">Gọi cấp cứu 115</a>' : "") + "</span></div>";
+  }).join("");
+  $("#care-patients-section").classList.toggle("hidden", !patients.length);
+  $("#care-patients").innerHTML = patients.map(patientRow).join("");
+  $("#care-panel").innerHTML =
+    "<h2>Chia sẻ với người thân</h2>" +
+    '<p class="note">Người thân có mã sẽ xem được tình trạng, số đo, biểu đồ, thông tin cá nhân và tiền sử gia đình của bạn. Họ không sửa được gì và không xem được giấy tờ. Bạn có thể thu hồi bất cứ lúc nào.</p>' +
+    '<button class="btn outline" id="care-create">Tạo mã chia sẻ</button><div id="care-code-box"></div>' +
+    "<h3>Người đang xem được hồ sơ của bạn</h3>" +
+    (caregivers.length ? '<div class="care-rows">' + caregivers.map(c => '<div class="care-row"><div class="care-row-main"><strong>' + esc(c.display_name) + '</strong><span class="note">Từ ' + esc(date(c.created_at, false)) + '</span></div><button class="delete-record" data-remove-link="' + esc(c.link_id) + '" data-remove-kind="caregiver">Thu hồi</button></div>').join("") + "</div>" : '<p class="note">Chưa chia sẻ với ai.</p>') +
+    "<h3>Theo dõi người thân</h3>" +
+    '<form id="care-form" class="care-form"><label>Nhập mã người thân gửi cho bạn<input id="care-code-input" autocomplete="off" autocapitalize="characters" maxlength="16" required></label><button class="btn primary" type="submit">Liên kết</button></form><p id="care-error" class="inline-message error hidden" role="alert"></p>' +
+    (patients.length ? '<div class="care-rows">' + patients.map(patientRow).join("") + "</div>" : "");
+}
+async function createCareCode() {
+  try {
+    const invite = await api.careInvite();
+    $("#care-code-box").innerHTML = '<p class="care-code">' + esc(invite.code.slice(0, 4) + " " + invite.code.slice(4)) + '</p><p class="note">Gửi mã này cho người thân. Mã dùng được một lần và hết hạn lúc ' + esc(date(invite.expires_at)) + ". Tạo mã mới sẽ hủy mã cũ.</p>";
+  } catch (error) { toast(error.message, "error"); }
+}
+async function acceptCareCode(event) {
+  event.preventDefault();
+  errorAt("#care-error");
+  try {
+    const linked = await api.careAccept($("#care-code-input").value.trim());
+    await refreshCare();
+    toast("Đã liên kết với " + linked.display_name + ".");
+  } catch (error) { errorAt("#care-error", error.message); }
+}
+async function removeCareLink(id, kind) {
+  const ok = kind === "caregiver"
+    ? await confirmAction("Thu hồi quyền xem?", "Người này sẽ không xem được hồ sơ của bạn nữa.", "Thu hồi")
+    : await confirmAction("Ngừng theo dõi?", "Bạn sẽ không xem được hồ sơ của người này nữa.", "Ngừng theo dõi");
+  if (!ok) return;
+  try { await api.careRemove(id); await refreshCare(); toast(kind === "caregiver" ? "Đã thu hồi quyền xem." : "Đã ngừng theo dõi."); }
+  catch (error) { toast(error.message, "error"); }
+}
+async function viewPatient(patientId) {
+  const patient = state.care.patients.find(p => p.patient_id === patientId);
+  if (!patient || state.viewing) return;
+  try {
+    const shared = await api.careProfile(patientId);
+    state.own = { health: state.health, records: state.records, result: state.result };
+    state.viewing = { id: patientId, name: shared.display_name };
+    state.health = shared.health; state.records = []; state.result = null;
+    document.body.classList.add("viewing");
+    $("#viewing-text").textContent = "Bạn đang xem hồ sơ của " + shared.display_name + ". Chỉ xem, không sửa được.";
+    $("#viewing-banner").classList.remove("hidden");
+    personalize();
+    await refreshRecords();
+    navigate("dashboard");
+  } catch (error) { toast(error.message, "error"); }
+}
+async function exitViewing() {
+  if (!state.viewing) return;
+  Object.assign(state, state.own, { viewing: null, own: null });
+  document.body.classList.remove("viewing");
+  $("#viewing-banner").classList.add("hidden");
+  personalize(); renderDashboard(); renderHistory();
+  navigate("dashboard");
+  refreshCare();
+}
+
 function analysisMarkup(analysis) {
   const metricRows = analysis.metrics?.length ? '<div class="extracted-metrics">' + analysis.metrics.map(metric => {
     const badge = metric.flag === "normal" ? "safe" : metric.flag === "unknown" ? "neutral" : "attention";
@@ -598,6 +694,7 @@ function updateDocumentButton() {
 }
 
 function openMedicalUpload() {
+  if (state.viewing) return;
   resetMedicalUpload();
   $("#medical-upload-dialog").showModal();
 }
@@ -680,6 +777,7 @@ async function deleteMedicalRecord(id) {
 }
 
 function openMeasurement(mode = "manual") {
+  if (state.viewing) return;
   errorAt("#measurement-error");
   $("#measurement-dialog").showModal();
   setMeasureMode(mode);
@@ -812,6 +910,7 @@ function clearAccount() {
   state.authEpoch++;
   stopStreams();
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close());
+  state.viewing = null; state.own = null; state.care = { patients: [], caregivers: [] }; document.body.classList.remove("viewing");
   state.user = null; state.health = null; state.records = []; state.result = null; state.medicalRecords = []; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
@@ -827,6 +926,7 @@ async function signOut() {
   } catch (error) { toast(error.message, "error"); }
 }
 function editProfile() {
+  if (state.viewing) return;
   state.editing = true; fillWizard(state.health); screen("onboarding");
 }
 async function enterAccount(user) {
@@ -839,7 +939,7 @@ async function enterAccount(user) {
     state.editing = false; fillWizard(); screen("onboarding");
   } else {
     personalize(); screen("app");
-    await Promise.all([refreshRecords(), refreshMedicalRecords()]);
+    await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshCare()]);
     navigate(location.hash.slice(1) || "dashboard");
   }
 }
@@ -899,11 +999,18 @@ function bindEvents() {
     const deleteRecord = event.target.closest("[data-delete-record]");
     if (deleteRecord) deleteMedicalRecord(deleteRecord.dataset.deleteRecord);
     if (event.target.closest("[data-open-upload]")) openMedicalUpload();
+    const viewTarget = event.target.closest("[data-view-patient]");
+    if (viewTarget) viewPatient(viewTarget.dataset.viewPatient);
+    const removeTarget = event.target.closest("[data-remove-link]");
+    if (removeTarget) removeCareLink(removeTarget.dataset.removeLink, removeTarget.dataset.removeKind);
+    if (event.target.closest("#care-create")) createCareCode();
+    if (event.target.closest("#exit-viewing")) exitViewing();
     if (event.target.closest("[data-open-measurement]")) openMeasurement();
     if (event.target.closest("#history-add")) openMeasurement();
     if (event.target.closest("#retry-history")) refreshRecords();
   });
   $("#edit-profile").addEventListener("click", editProfile);
+  document.addEventListener("submit", event => { if (event.target.id === "care-form") acceptCareCode(event); });
   $$("dialog").forEach(dialog => dialog.addEventListener("cancel", event => { event.preventDefault(); closeDialog(dialog); }));
   $("#delete-assessment").addEventListener("click", event => deleteAssessment(event.currentTarget.dataset.id));
   $("#new-measurement").addEventListener("click", () => openMeasurement());

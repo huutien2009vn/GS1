@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auth import current_user, public_user, router as auth_router
+from .care import router as care_router
 from .config import get_settings
 from .database import engine, get_session
 from .migrations import migrate_schema
@@ -71,6 +72,7 @@ async def privacy_and_csrf(request: Request, call_next):
 
 
 app.include_router(auth_router)
+app.include_router(care_router)
 
 
 @app.get("/api/health")

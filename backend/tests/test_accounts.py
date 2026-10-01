@@ -291,3 +291,70 @@ def test_legacy_migration_preserves_unowned_rows(tmp_path):
             assert "user_id" in {col["name"] for col in inspect(conn).get_columns(table)}
             assert conn.execute(text(f"SELECT id, user_id FROM {table}")).first() == ("legacy-record", None)
     engine.dispose()
+
+
+def _demo_with_profile(client):
+    user = login(client)
+    client.put("/api/profile", json=PROFILE)
+    return user, client.cookies.get(auth.COOKIE_NAME)
+
+
+def _as(client, cookie):
+    client.cookies.clear()
+    client.cookies.set(auth.COOKIE_NAME, cookie)
+
+
+def test_care_link_grants_read_only_access_until_revoked(client):
+    patient, patient_cookie = _demo_with_profile(client)
+    reading_id = client.post("/api/assessments", json=MEASUREMENT).json()["id"]
+    code = client.post("/api/care/invites").json()["code"]
+    assert client.post("/api/care/links", json={"code": code}).status_code == 400  # own code
+
+    client.cookies.clear()  # keep the patient's session alive for later
+    _, caregiver_cookie = _demo_with_profile(client)
+    base = "/api/care/patients/" + patient["id"]
+    assert client.get(base + "/assessments").status_code == 404  # no link yet
+    linked = client.post("/api/care/links", json={"code": code.lower()})
+    assert linked.status_code == 201 and linked.json()["patient_id"] == patient["id"]
+    assert client.post("/api/care/links", json={"code": code}).status_code == 404  # single use
+
+    assert [row["id"] for row in client.get(base + "/assessments").json()] == [reading_id]
+    assert client.get(base + "/assessments/" + reading_id).status_code == 200
+    shared = client.get(base + "/profile").json()["health"]
+    assert set(shared) == {"display_name", "profile", "family_history"}
+    listed = client.get("/api/care/links").json()
+    assert listed["patients"][0]["latest"]["risk_level"] == "safe" and listed["caregivers"] == []
+    # Read-only: the caregiver cannot delete or reach the patient's own-account routes.
+    assert client.delete("/api/assessments/" + reading_id).status_code == 404
+    assert client.get("/api/assessments/" + reading_id).status_code == 404
+
+    _as(client, patient_cookie)
+    links = client.get("/api/care/links").json()
+    assert len(links["caregivers"]) == 1 and links["patients"] == []
+    assert client.delete("/api/care/links/" + links["caregivers"][0]["link_id"]).status_code == 204
+    _as(client, caregiver_cookie)
+    assert client.get(base + "/assessments").status_code == 404  # revoked at once
+    assert client.get(base + "/profile").status_code == 404
+
+
+def test_care_invite_expiry_replacement_and_rate_limit(client):
+    from backend.app import care
+    care._failed_codes.clear()
+    _, patient_cookie = _demo_with_profile(client)
+    first = client.post("/api/care/invites").json()["code"]
+    second = client.post("/api/care/invites").json()["code"]
+    client.post("/api/auth/logout")
+    _demo_with_profile(client)
+    assert client.post("/api/care/links", json={"code": first}).status_code == 404  # replaced by the newer code
+
+    async def expire():
+        async with client.db_factory() as session:
+            invite = await session.get(care.CareInvite, care._digest(second))
+            invite.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+            await session.commit()
+    asyncio.run(expire())
+    assert client.post("/api/care/links", json={"code": second}).status_code == 404  # expired
+    for _ in range(3):
+        assert client.post("/api/care/links", json={"code": "WRONGCODE"}).status_code == 404
+    assert client.post("/api/care/links", json={"code": "WRONGCODE"}).status_code == 429
+    care._failed_codes.clear()
