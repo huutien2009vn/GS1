@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -24,6 +24,15 @@ class User(Base):
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     health_profile: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Avatar(Base):
+    """The account's profile picture: one small JPEG, already cropped and shrunk by the browser."""
+
+    __tablename__ = "avatars"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    image: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class LoginSession(Base):

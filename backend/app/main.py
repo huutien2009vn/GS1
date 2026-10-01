@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -18,7 +18,7 @@ from .care import router as care_router
 from .config import get_settings
 from .database import engine, get_session
 from .migrations import migrate_schema
-from .models import Assessment, Feedback, MedicalRecord, User
+from .models import Assessment, Avatar, Feedback, MedicalRecord, User
 from .schemas import (AccountProfile, AssessmentCreate, AssessmentHistoryItem, AssessmentResult,
                       FeedbackCreate, FeedbackResult, MedicalDocumentAnalyzeResult,
                       MedicalRecordCreate, MedicalRecordResult, MeasurementCreate)
@@ -116,6 +116,36 @@ async def save_profile(payload: AccountProfile, user: User = Depends(current_use
     user.onboarding_completed = True
     await session.commit()
     return {"user": public_user(user), "health": user.health_profile}
+
+
+MAX_AVATAR_BYTES = 200 * 1024
+
+
+@app.get("/api/avatar")
+async def get_avatar(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    avatar = await session.get(Avatar, user.id)
+    # 204 rather than 404: an account without a picture is normal and should not log an error in the browser.
+    return Response(avatar.image, media_type="image/jpeg") if avatar else Response(status_code=204)
+
+
+@app.put("/api/avatar", status_code=204)
+async def save_avatar(request: Request, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    # The browser sends a 256px JPEG; anything else is refused instead of being converted here.
+    if int(request.headers.get("content-length") or 0) > MAX_AVATAR_BYTES:
+        raise HTTPException(413, "Ảnh quá lớn. Hãy chọn ảnh khác.")
+    content = await request.body()
+    if len(content) > MAX_AVATAR_BYTES:
+        raise HTTPException(413, "Ảnh quá lớn. Hãy chọn ảnh khác.")
+    if not content.startswith(b"\xff\xd8\xff"):
+        raise HTTPException(422, "Tệp không phải ảnh hợp lệ.")
+    await session.merge(Avatar(user_id=user.id, image=content))
+    await session.commit()
+
+
+@app.delete("/api/avatar", status_code=204)
+async def delete_avatar(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    await session.execute(delete(Avatar).where(Avatar.user_id == user.id))
+    await session.commit()
 
 
 @app.get("/api/risk")

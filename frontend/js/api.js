@@ -27,6 +27,10 @@ export const api = {
   demo: () => request("/api/auth/demo", { method: "POST" }),
   logout: () => request("/api/auth/logout", { method: "POST" }),
   profile: () => request("/api/profile"),
+  // The picture is bytes, not JSON. Resolves to null when the account has none (204).
+  avatar: () => fetch("/api/avatar", { credentials: "same-origin", cache: "no-store" }).then(response => response.status === 200 ? response.blob() : null).catch(() => null),
+  saveAvatar: blob => request("/api/avatar", { method: "PUT", body: blob, headers: { "Content-Type": "image/jpeg" } }),
+  removeAvatar: () => request("/api/avatar", { method: "DELETE" }),
   risk: () => request("/api/risk"),
   saveProfile: body => request("/api/profile", { method: "PUT", body: JSON.stringify(body) }),
   assess: body => request("/api/assessments", { method: "POST", body: JSON.stringify(body) }),
