@@ -131,16 +131,29 @@ DEMO_RETENTION_DAYS=3
 - Tài khoản dùng thử không bao giờ gọi AI, nên không tốn phí API.
 - Người ở máy khác chỉ vào được khi server lắng nghe ngoài `127.0.0.1` (`--host 0.0.0.0`) và `APP_BASE_URL`, `CORS_ORIGINS` trỏ đúng địa chỉ họ mở. Khi đưa lên mạng công khai, dùng HTTPS với `APP_ENV=production` và `SESSION_SECRET` dài từ 32 ký tự.
 
-### Đưa lên mạng bằng Render và Neon
+### Đưa lên mạng bằng Vercel và Neon
 
-File `render.yaml` ở thư mục gốc mô tả sẵn một dịch vụ web miễn phí.
+Không cần thẻ thanh toán. Cả ứng dụng chạy như một hàm serverless (`api/index.py`, `vercel.json`).
 
-1. Tạo database trên [Neon](https://neon.tech) và chép chuỗi kết nối (`postgresql://...`).
-2. Trên [Render](https://render.com): **New > Blueprint**, chọn repo này. Render đọc `render.yaml` và tự tạo `SESSION_SECRET`.
-3. Điền hai biến còn thiếu: `DATABASE_URL` (chuỗi của Neon) và `APP_BASE_URL` (địa chỉ `https://...onrender.com` mà Render cấp cho dịch vụ).
-4. Deploy lại. Mở địa chỉ đó và bấm **Dùng thử với hồ sơ mẫu**.
+1. Tạo database trên [Neon](https://neon.tech), bấm **Connect** và chép chuỗi kết nối trực tiếp (`postgresql://...`, không chọn "Pooled connection").
+2. Trên [Vercel](https://vercel.com): **Add New > Project**, chọn repo này, Framework Preset để **Other**.
+3. Trong **Environment Variables** thêm:
 
-Gói miễn phí của Render tự ngủ khi không ai dùng, nên lần mở đầu tiên có thể mất khoảng một phút. Web Bluetooth và cài PWA cần HTTPS, Render đã có sẵn.
+```dotenv
+DATABASE_URL=postgresql://...            # chuỗi của Neon
+SESSION_SECRET=...                       # python -c "import secrets; print(secrets.token_urlsafe(48))"
+APP_ENV=production
+DEMO_PUBLIC=true
+```
+
+4. Bấm **Deploy**, rồi mở địa chỉ `https://ten-du-an.vercel.app` và bấm **Dùng thử với hồ sơ mẫu**.
+
+Ghi chú:
+
+- `APP_BASE_URL` tự lấy theo địa chỉ production của Vercel. Chỉ cần đặt tay khi dùng tên miền riêng.
+- Chỉ địa chỉ production chạy được; các bản preview của Vercel có tên miền khác nên bị từ chối.
+- Bảng dữ liệu được tạo khi hàm khởi động lần đầu. Lần mở đầu sau một lúc không dùng sẽ chậm hơn vài giây.
+- Thư mục `public/` trống là có chủ ý: nó ngăn Vercel phát mã nguồn như file tĩnh.
 
 ### Đường link tạm từ máy này (Cloudflare Tunnel)
 

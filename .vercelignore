@@ -1,0 +1,6 @@
+backend/tests
+.impeccable
+.claude
+docker-compose.yml
+PRODUCT.md
+README.md
