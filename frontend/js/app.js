@@ -118,6 +118,8 @@ function personalize() {
   $$("[data-user-name]").forEach(el => el.textContent = state.user.display_name);
   $("#greeting").textContent = state.viewing ? "Hồ sơ của " + state.viewing.name : "Xin chào, " + state.user.display_name;
   $("#demo-banner").classList.toggle("hidden", !state.user.is_demo);
+  // Only trial accounts may create sample readings, so a real account's history never holds invented numbers.
+  $("#simulate-ble").classList.toggle("hidden", !state.user.is_demo);
   const today = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" }).format(new Date());
   $("#today-date").textContent = today.charAt(0).toUpperCase() + today.slice(1);
 }
