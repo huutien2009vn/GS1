@@ -1,7 +1,7 @@
 import hashlib
-from datetime import datetime, time, timezone
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, time, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -269,7 +269,7 @@ async def analyze_medical_record(
     return MedicalDocumentAnalyzeResult(
         analysis=analysis,
         document_hash=hashlib.sha256(content).hexdigest(),
-        privacy_note="Ảnh gốc không được ghi vào máy chủ GeneSense. Khi bạn lưu, ảnh chỉ được giữ trên thiết bị này.",
+        privacy_note="Ảnh gốc không được ghi vào hệ thống GeneSense. Khi bạn lưu, ảnh chỉ được giữ trên thiết bị này.",
     )
 
 

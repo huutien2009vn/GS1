@@ -387,6 +387,32 @@ def test_document_analysis_keeps_only_known_structured_values():
     assert analysis.own_conditions == ["hypertension"]
     assert [(item.member, item.condition) for item in analysis.family_conditions] == [("father", "stroke")]
     assert _gemini_schema(MEDICAL_DOCUMENT_SCHEMA)["properties"]["vitals"]["properties"]["systolic"]["type"] == "number"
+    assert "YYYY-MM-DD" in _gemini_schema(MEDICAL_DOCUMENT_SCHEMA)["properties"]["document_date"]["description"]
+
+
+def test_document_analysis_survives_answers_outside_the_limits():
+    """Gemini is not told the formats and lengths, so a day-first date or a long sentence must not fail the scan."""
+    from backend.app.services.ai_service import _document_date, _medical_analysis_from_json
+    import json
+    answer = {
+        "document_type": "other", "document_date": "01/10/2026", "provider": "x" * 500, "title": "Phiếu kết quả",
+        "summary": "y" * 5000, "metrics": [{"name": "Nhịp tim", "value": "76", "unit": "lần/phút", "reference_range": "60-100", "flag": "normal"},
+                                           {"name": "Trống", "value": "", "unit": "", "reference_range": "", "flag": "unknown"}],
+        "conditions": [], "medications": [{"name": " ", "dose": "5 mg", "frequency": ""}, {"name": "Amlodipin", "dose": "5 mg", "frequency": ""}],
+        "recommendations": ["z" * 900], "warnings": [], "confidence": "high",
+        "review_required": True, "source": "ai", "disclaimer": "Đối chiếu bản gốc.", "note_from_model": "bỏ qua",
+        "vitals": {"systolic": 128, "diastolic": 82, "heart_rate": 76, "spo2": 97, "glucose": 104},
+        "own_conditions": [], "family_conditions": [],
+    }
+    analysis = _medical_analysis_from_json(json.dumps(answer))
+    assert analysis.document_date == "2026-10-01" and analysis.vitals.systolic == 128
+    assert len(analysis.provider) == 180 and len(analysis.summary) == 1200 and len(analysis.recommendations[0]) == 300
+    assert [metric.name for metric in analysis.metrics] == ["Nhịp tim"]
+    assert [medication.name for medication in analysis.medications] == ["Amlodipin"]
+    assert _document_date("Ngày 01 tháng 10 năm 2026") == "2026-10-01" and _document_date("2026-10-01T07:15") == "2026-10-01"
+    assert _document_date("2026/10/01") == "2026-10-01" and _document_date("01-10-2026-05-10-2026") == "2026-10-01"
+    assert _document_date("Từ 01/10/2026 đến 05/10/2026") == "2026-10-01"
+    assert _document_date("31/02/2026") is None and _document_date("không rõ") is None and _document_date(None) is None
 
 
 def test_medical_document_validation(client):

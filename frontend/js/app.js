@@ -504,7 +504,7 @@ async function showResult(id) {
     const r = await reader().assessment(id);
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
-    $("#result-detail").innerHTML = '<p class="note">' + (fromDocument(r) ? "Ghi trên giấy tờ ngày " + when(r) : "Đo lúc " + when(r) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase())) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + esc(r.insight.summary) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : "");
+    $("#result-detail").innerHTML = '<p class="note">' + (fromDocument(r) ? "Ghi trên giấy tờ ngày " + when(r) : "Đo lúc " + when(r) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase())) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" && !fromDocument(r) ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + (fromDocument(r) ? "Đây là số liệu cũ ghi trên giấy tờ, không phản ánh tình trạng hiện tại." : esc(r.insight.summary)) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + (fromDocument(r) ? "" : alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : ""));
     $("#delete-assessment").dataset.id = r.id;
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
@@ -837,17 +837,19 @@ function renderMedicalRecords() {
 }
 
 // Scans stay on this device: IndexedDB, keyed by the saved record's id. They are never sent back to the server.
-// ponytail: scans are not removed at sign-out, so the next user of a shared browser could reach them with
-// developer tools; clear the store at sign-out if shared devices become a real use.
+// ponytail: an account that can sign in again keeps its scans after sign-out, so the next user of a shared browser
+// could reach them with developer tools; clear the store at every sign-out if shared devices become a real use.
 function scanRequest(mode, run) {
   return new Promise((resolve, reject) => {
     const open = indexedDB.open("genesense-scans", 1);
     open.onupgradeneeded = () => open.result.createObjectStore("scans");
     open.onerror = () => reject(open.error);
     open.onsuccess = () => {
-      const request = run(open.result.transaction("scans", mode).objectStore("scans"));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      try {
+        const request = run(open.result.transaction("scans", mode).objectStore("scans"));
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      } catch (error) { reject(error); } // thrown inside this handler it would never reach the promise, and the caller would wait forever
     };
   }).catch(() => null); // private windows and blocked storage: the app works, only without the kept scan
 }
@@ -865,6 +867,9 @@ async function shrinkImage(file, max = 2000) {
   try {
     const image = await createImageBitmap(file);
     const k = Math.min(1, max / Math.max(image.width, image.height)), canvas = document.createElement("canvas");
+    // A small PNG (a screenshot or an exported page) goes as it is: JPEG would only smear its text.
+    // Camera photos are always re-encoded, which also drops the location data stored in them.
+    if (k === 1 && file.type === "image/png" && file.size <= 3 * 1024 * 1024) return file;
     canvas.width = Math.round(image.width * k); canvas.height = Math.round(image.height * k);
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -876,7 +881,9 @@ async function shrinkImage(file, max = 2000) {
 const APPLY_VITALS = [["systolic", "Huyết áp tâm thu (mmHg)", 50, 260], ["diastolic", "Huyết áp tâm trương (mmHg)", 30, 180], ["heart_rate", "Nhịp tim (lần/phút)", 20, 260], ["spo2", "Oxy trong máu SpO₂ (%)", 50, 100], ["glucose", "Đường huyết (mg/dL)", 20, 600]];
 // The part of a scanned document that can go into the profile. Only what is new is offered.
 function applyMarkup(analysis) {
-  const vitals = analysis.vitals || {}, found = APPLY_VITALS.filter(([key]) => vitals[key] != null);
+  // Blood pressure is saved as a pair, so both fields show even when the AI read only one of the two numbers.
+  const vitals = analysis.vitals || {}, pressure = vitals.systolic != null || vitals.diastolic != null;
+  const found = APPLY_VITALS.filter(([key]) => vitals[key] != null || (pressure && ["systolic", "diastolic"].includes(key)));
   const name = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const own = (analysis.own_conditions || []).filter(key => !state.health.profile.known_conditions.includes(key));
   const family = (analysis.family_conditions || []).filter(item => !state.health.family_history.find(row => row.member_id === item.member)?.conditions.includes(item.condition));
@@ -884,13 +891,14 @@ function applyMarkup(analysis) {
   const check = (attribute, label) => '<label class="check-label"><input type="checkbox" ' + attribute + ' checked><span>' + label + "</span></label>";
   return '<h3>Đưa vào hồ sơ</h3><p class="note">Bỏ chọn mục bạn không muốn đưa vào. Sửa lại số nếu AI đọc sai.</p>' +
     (found.length ? '<fieldset class="apply-group"><legend>Chỉ số đo</legend>' + check('id="apply-vitals"', "Thêm vào Lịch sử đo với nguồn “Từ giấy tờ”<small>Số liệu trên giấy tờ là số liệu cũ, không thay đổi tình trạng ở trang Hôm nay.</small>") +
-      '<div class="field-grid">' + found.map(([key, label, min, max]) => "<label>" + label + '<input type="number" inputmode="decimal" step=".1" min="' + min + '" max="' + max + '" data-apply-vital="' + key + '" value="' + esc(vitals[key]) + '"></label>').join("") +
-      '<label>Ngày ghi trên giấy tờ<input type="date" id="apply-date" required max="' + new Date().toLocaleDateString("sv") + '" value="' + esc(analysis.document_date || "") + '"></label></div></fieldset>' : "") +
+      '<div class="field-grid">' + found.map(([key, label, min, max]) => "<label>" + label + '<input type="number" inputmode="decimal" step=".1" min="' + min + '" max="' + max + '" data-apply-vital="' + key + '" value="' + esc(vitals[key] == null ? "" : Math.round(vitals[key] * 10) / 10) + '"></label>').join("") +
+      '<label>Ngày ghi trên giấy tờ<input type="date" id="apply-date" required min="1950-01-01" max="' + new Date().toLocaleDateString("sv") + '" value="' + esc(analysis.document_date || "") + '"></label></div></fieldset>' : "") +
     (own.length ? '<fieldset class="apply-group"><legend>Bệnh đã được chẩn đoán</legend>' + own.map(key => check('data-apply-own="' + esc(key) + '"', esc(name(key)))).join("") + "</fieldset>" : "") +
     (family.length ? '<fieldset class="apply-group"><legend>Tiền sử gia đình</legend>' + family.map(item => check('data-apply-family="' + esc(item.member + "|" + item.condition) + '"', esc(MEMBERS.find(m => m.id === item.member).label + ": " + name(item.condition)))).join("") + "</fieldset>" : "");
 }
+const documentVitals = () => Object.fromEntries([...$("#document-apply").querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
 // Runs after the document itself is saved. Profile changes repeat safely; the reading is last, so a retry cannot add it twice.
-async function applyDocument() {
+async function applyDocument(vitals) {
   const form = $("#document-apply");
   const own = [...form.querySelectorAll("[data-apply-own]:checked")].map(el => el.dataset.applyOwn);
   const family = [...form.querySelectorAll("[data-apply-family]:checked")].map(el => el.dataset.applyFamily.split("|"));
@@ -907,8 +915,7 @@ async function applyDocument() {
     state.health = data.health; state.user = data.user;
     await refreshRisk();
   }
-  if (form.querySelector("#apply-vitals")?.checked) {
-    const vitals = Object.fromEntries([...form.querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
+  if (vitals) {
     await api.assess({ vitals, source: "document", measured_on: $("#apply-date").value });
     await refreshRecords();
   }
@@ -1012,6 +1019,11 @@ async function saveMedicalRecord() {
   const applyVitals = $("#apply-vitals")?.checked;
   $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !applyVitals; });
   if (!$("#document-apply").reportValidity()) return;
+  // Checked before anything is saved, so a reading the server would refuse cannot leave the document half applied.
+  const vitals = applyVitals ? documentVitals() : null;
+  const problem = vitals ? vitalsProblem(vitals, true) : "";
+  errorAt("#record-save-error", problem);
+  if (problem) return;
   state.busy = true;
   const button = $("#save-medical-record");
   const original = button.innerHTML;
@@ -1023,9 +1035,9 @@ async function saveMedicalRecord() {
     if (epoch !== state.authEpoch) return;
     state.medicalRecords = [saved, ...state.medicalRecords.filter(record => record.id !== saved.id)];
     if (state.pendingScan) await scanRequest("readwrite", store => store.put(state.pendingScan, saved.id));
-    await applyDocument();
+    renderMedicalRecords(); // the document is saved from here on, even if a later step fails
+    await applyDocument(vitals);
     closeDialog($("#medical-upload-dialog"));
-    renderMedicalRecords();
     navigate("records");
     toast("Đã lưu giấy tờ.");
   } catch (error) { errorAt("#record-save-error", error.message); }
@@ -1137,11 +1149,17 @@ function startSimulation() {
   $("#disconnect-device").classList.remove("hidden");
   freshnessTimer = setInterval(renderDevice, 3000);
 }
+// The rules the server applies to any reading, checked here first. The wording follows where the numbers came from.
+function vitalsProblem(values, fromPaper = false) {
+  if (!KEYS.some(key => values[key] != null)) return fromPaper ? "Hãy nhập ít nhất một chỉ số, hoặc bỏ chọn mục thêm vào Lịch sử đo." : "Hãy nhập ít nhất một chỉ số vừa đo.";
+  if ((values.systolic == null) !== (values.diastolic == null)) return "Huyết áp cần cả số trên (tâm thu) và số dưới (tâm trương).";
+  if (values.systolic != null && values.systolic <= values.diastolic) return "Số tâm thu cần lớn hơn số tâm trương. Hãy kiểm tra lại " + (fromPaper ? "giấy tờ." : "máy đo.");
+  return "";
+}
 async function saveMeasurement(values, source, samples = []) {
   if (state.busy) return;
-  if (!KEYS.some(key => values[key] != null)) { errorAt("#measurement-error", "Hãy nhập ít nhất một chỉ số vừa đo."); return; }
-  if ((values.systolic == null) !== (values.diastolic == null)) { errorAt("#measurement-error", "Huyết áp cần cả số trên (tâm thu) và số dưới (tâm trương)."); return; }
-  if (values.systolic != null && values.systolic <= values.diastolic) { errorAt("#measurement-error", "Số tâm thu cần lớn hơn số tâm trương. Hãy kiểm tra lại máy đo."); return; }
+  const problem = vitalsProblem(values);
+  if (problem) { errorAt("#measurement-error", problem); return; }
   state.busy = true;
   const epoch = state.authEpoch;
   const button = source === "manual" ? $('#measurement-form button[type="submit"]') : $("#save-device");
@@ -1185,6 +1203,8 @@ function clearAccount() {
   state.viewing = null; state.own = null; state.care = { patients: [], caregivers: [] }; document.body.classList.remove("viewing");
   $("#viewing-banner").classList.add("hidden"); $("#viewing-text").textContent = "";
   setAvatar(null);
+  if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
+  state.scanUrl = null; $("#scan-image").removeAttribute("src"); $("#scan-open").removeAttribute("href");
   state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#genetics-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
@@ -1198,7 +1218,10 @@ async function confirmSignOut() {
 }
 async function signOut() {
   try {
+    // A trial account cannot be opened again, so its scans would stay on this device with no way to reach them.
+    const orphans = state.user?.is_demo ? state.medicalRecords.map(record => record.id) : [];
     await api.logout();
+    for (const id of orphans) await scanRequest("readwrite", store => store.delete(id));
     clearAccount(); screen("login");
     accountChannel?.postMessage("signed-out");
     window.history.replaceState(null, "", "/");
