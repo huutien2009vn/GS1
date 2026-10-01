@@ -466,16 +466,16 @@ function renderProfile() {
 }
 
 // Family-risk tab: a level per condition from who in the family has it, computed on the server from the current profile.
-const RISK_LEVELS = { very_high: ["attention very", "Rất cao"], high: ["attention", "Cao"], moderate: ["", "Trung bình"], diagnosed: ["", "Đã được chẩn đoán"], unknown: ["", "Chưa đủ thông tin"], none: ["", "Chưa ghi nhận"] };
-function relativeNames(row) {
-  const names = row.relatives.map(id => id === "sibling" && row.sibling_count > 1 ? row.sibling_count + " anh chị em ruột" : (MEMBERS.find(m => m.id === id)?.label || "").toLowerCase()).filter(Boolean);
-  return names.length > 1 ? names.slice(0, -1).join(", ") + " và " + names.at(-1) : names[0] || "";
-}
-function riskReason(row) {
-  const who = relativeNames(row);
-  if (row.level === "diagnosed") return "Bệnh này đã có trong hồ sơ cá nhân." + (who ? " Người thân cùng mắc: " + who + "." : "");
-  if (who) return "Người thân mắc bệnh: " + who + ".";
-  return row.level === "unknown" ? "Chưa có người thân nào được khai báo mắc bệnh này, nhưng còn người thân chưa rõ tiền sử." : "Không có người thân nào được khai báo mắc bệnh này.";
+// tone = colour and shape (same vocabulary as the status word on Today), bars = filled steps of the 3-step meter.
+const RISK_LEVELS = {
+  very_high: { tone: "alert", label: "Rất cao", bars: 3 }, high: { tone: "attention", label: "Cao", bars: 2 }, moderate: { tone: "moderate", label: "Trung bình", bars: 1 },
+  diagnosed: { tone: "diagnosed", label: "Đã được chẩn đoán" }, unknown: { tone: "neutral", label: "Chưa đủ thông tin" }, none: { tone: "neutral", label: "Chưa ghi nhận" },
+};
+const riskLevel = level => '<span class="status-word risk-level ' + RISK_LEVELS[level].tone + '">' + RISK_LEVELS[level].label + "</span>";
+const riskMeter = level => '<span class="risk-meter ' + RISK_LEVELS[level].tone + '" aria-hidden="true">' + [1, 2, 3].map(n => "<i" + (n <= RISK_LEVELS[level].bars ? ' class="on"' : "") + "></i>").join("") + "</span>";
+function riskWho(row) {
+  const names = row.relatives.map(id => id === "sibling" && row.sibling_count > 1 ? row.sibling_count + " anh chị em ruột" : MEMBERS.find(m => m.id === id)?.label).filter(Boolean);
+  return names.length ? '<p class="risk-who"><span class="risk-who-label">Người thân mắc bệnh</span>' + names.map(name => "<span>" + esc(name) + "</span>").join("") + "</p>" : "";
 }
 async function refreshRisk() {
   const epoch = state.authEpoch;
@@ -507,14 +507,26 @@ function renderGenetics() {
   const notes = [["Bên nội", h.paternal_notes], ["Bên ngoại", h.maternal_notes]].filter(([, text]) => text);
   const order = Object.keys(RISK_LEVELS);
   const rows = (state.risk?.conditions || []).slice().sort((a, b) => order.indexOf(a.level) - order.indexOf(b.level));
-  const raised = rows.filter(row => ["very_high", "high"].includes(row.level)).length;
-  $("#genetics-lead").textContent = !state.risk ? "" : rows.every(row => row.level === "unknown") ? "Chưa đủ thông tin về tiền sử gia đình. Hãy hỏi thêm người thân rồi cập nhật." : raised ? raised + " bệnh có nguy cơ cao hơn do tiền sử gia đình." : "Chưa ghi nhận bệnh nào có nguy cơ cao do tiền sử gia đình.";
-  const risk = state.risk
-    ? '<div class="risk-rows">' + rows.map(row => { const [tone, label] = RISK_LEVELS[row.level]; return '<div class="risk-row"><div class="risk-head"><h3>' + conditionName(row.condition) + '</h3><span class="tag ' + tone + '">' + label + "</span></div><p>" + esc(riskReason(row)) + "</p>" + (row.advice ? '<p class="note">' + esc(row.advice) + "</p>" : "") + "</div>"; }).join("") + "</div>"
-    : '<div class="empty-state"><h3>Chưa tải được mức nguy cơ</h3><button class="btn outline" id="retry-risk">Thử lại</button></div>';
-  $("#genetics-content").innerHTML =
-    '<article class="panel"><h2>Nguy cơ theo tiền sử gia đình</h2><p class="note">Mức nguy cơ dựa trên số người thân mắc bệnh và mức độ gần gũi: bố mẹ, anh chị em tính nặng hơn ông bà.</p>' + risk + "</article>" +
-    '<article class="panel"><h2>Sơ đồ gia đình</h2><div class="ft-summary">' + familySummary(h) + "</div>" +
+  const of = (...levels) => rows.filter(row => levels.includes(row.level));
+  const raised = of("very_high", "high", "moderate"), diagnosed = of("diagnosed"), rest = of("unknown", "none");
+  const high = of("very_high", "high").length;
+  $("#genetics-lead").textContent = !state.risk ? "" : rows.every(row => row.level === "unknown") ? "Chưa đủ thông tin về tiền sử gia đình. Hãy hỏi thêm người thân rồi cập nhật." : high ? high + " bệnh có nguy cơ cao hơn do tiền sử gia đình." : "Chưa ghi nhận bệnh nào có nguy cơ cao do tiền sử gia đình.";
+  const card = row => '<article class="risk-card ' + RISK_LEVELS[row.level].tone + '"><div class="risk-card-top">' + riskLevel(row.level) + (RISK_LEVELS[row.level].bars ? riskMeter(row.level) : "") + "</div><h3>" + conditionName(row.condition) + "</h3>" +
+    (row.level === "diagnosed" ? "<p>Bệnh này đã có trong hồ sơ cá nhân.</p>" : "") + riskWho(row) + (row.advice ? '<p class="risk-do"><strong>Nên làm:</strong> ' + esc(row.advice) + "</p>" : "") + "</article>";
+  const count = level => '<div class="' + RISK_LEVELS[level].tone + '"><dt>' + riskLevel(level) + "</dt><dd>" + of(level).length + " <small>bệnh</small></dd></div>";
+  const section = (title, note, body) => '<section class="section genetics-section"><div class="section-heading"><h2>' + title + "</h2></div>" + (note ? '<p class="note">' + note + "</p>" : "") + body + "</section>";
+  const risk = !state.risk
+    ? '<article class="panel empty-state"><h3>Chưa tải được mức nguy cơ</h3><button class="btn outline" id="retry-risk">Thử lại</button></article>'
+    : '<dl class="score-list risk-counts">' + count("very_high") + count("high") + count("moderate") + "</dl>" +
+      (raised.length ? section("Bệnh cần lưu ý", "Xếp theo mức nguy cơ, cao nhất ở trên.", '<div class="risk-grid">' + raised.map(card).join("") + "</div>") : "") +
+      (diagnosed.length ? section("Bệnh đã được chẩn đoán", "", '<div class="risk-grid">' + diagnosed.map(card).join("") + "</div>") : "") +
+      (rest.length ? section("Các bệnh khác", "", '<div class="panel risk-rest">' + rest.map(row => '<div class="risk-rest-row"><strong>' + conditionName(row.condition) + "</strong>" + riskLevel(row.level) + "</div>").join("") + "</div>") : "") +
+      '<div class="panel risk-key"><h3>Cách đọc mức nguy cơ</h3><ul>' +
+        "<li>" + riskLevel("very_high") + riskMeter("very_high") + "<span>Từ hai người là bố, mẹ, anh chị em mắc bệnh; hoặc một người trong số đó cùng với ông bà.</span></li>" +
+        "<li>" + riskLevel("high") + riskMeter("high") + "<span>Một người là bố, mẹ hoặc anh chị em mắc bệnh; hoặc hai ông bà cùng một bên.</span></li>" +
+        "<li>" + riskLevel("moderate") + riskMeter("moderate") + "<span>Chỉ có ông hoặc bà mắc bệnh.</span></li></ul></div>";
+  $("#genetics-content").innerHTML = risk +
+    section("Sơ đồ gia đình", "", '<article class="panel"><div class="ft-summary">' + familySummary(h) + "</div>" +
     '<div class="family-tree" role="group" aria-label="Sơ đồ gia đình ba thế hệ">' +
       '<span class="ft-side ft-side-p">Bên nội</span><span class="ft-side ft-side-m">Bên ngoại</span>' +
       familyNode(h, member("paternal-grandfather"), "ft-pgf") + familyNode(h, member("paternal-grandmother"), "ft-pgm") +
@@ -525,7 +537,7 @@ function renderGenetics() {
       '<div class="ft-children"><div class="ft-node you ' + (conditions.length ? "known" : "none") + '"><span class="ft-rel">' + (state.viewing ? esc(h.display_name) : "Bạn") + '</span><span class="ft-state">' + esc(conditions.join(", ") || "Không khai báo bệnh") + "</span></div>" + familyNode(h, member("sibling")) + "</div>" +
     "</div>" +
     '<ul class="ft-legend"><li><span class="ft-key known"></span>Có bệnh đã biết</li><li><span class="ft-key none"></span>Không có bệnh đã biết</li><li><span class="ft-key unknown"></span>Chưa rõ</li></ul>' +
-    notes.map(([title, text]) => "<h3>Ghi chú " + title.toLowerCase() + "</h3><p>" + esc(text) + "</p>").join("") + "</article>" +
+    notes.map(([title, text]) => "<h3>Ghi chú " + title.toLowerCase() + "</h3><p>" + esc(text) + "</p>").join("") + "</article>") +
     '<p class="note">Thông tin tham khảo để trao đổi với bác sĩ, không phải chẩn đoán hay kết quả xét nghiệm gen. Tiền sử gia đình không quyết định tất cả: lối sống và việc theo dõi đều đặn vẫn làm thay đổi nguy cơ.</p>';
 }
 

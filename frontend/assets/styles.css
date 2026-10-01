@@ -184,13 +184,53 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .tag.safe { background: var(--green-bg); color: var(--green); }
 .tag.attention { background: var(--amber-bg); color: var(--amber); }
 .tag.alert { background: var(--red-bg); color: var(--red); }
-.tag.very { box-shadow: inset 0 0 0 1px var(--amber); }
-.risk-row { padding: 16px 0; border-bottom: 1px solid var(--line); }
-.risk-row:first-child { padding-top: 4px; }
-.risk-row:last-child { border-bottom: 0; padding-bottom: 0; }
-.risk-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-bottom: 6px; }
-.risk-head h3 { margin: 0; }
-.risk-row p { margin: 0 0 4px; }
+/* Family-risk tab. Level = colour + shape + word (as the status word on Today) plus a 3-step meter. */
+.risk-level { font-size: 1.11rem; margin: 0; gap: 8px; }
+.risk-level::before { width: 18px; height: 18px; }
+.risk-level.moderate { color: var(--ink-2); }
+.risk-level.moderate::before { border-radius: 50%; }
+.risk-level.diagnosed { color: var(--blue); }
+.risk-level.diagnosed::before { border-radius: 4px; }
+.risk-level.neutral { font-weight: 600; }
+.risk-meter { display: inline-flex; align-items: flex-end; gap: 3px; height: 22px; color: var(--ink-2); }
+.risk-meter.alert { color: var(--red); }
+.risk-meter.attention { color: var(--amber); }
+.risk-meter i { width: 8px; border: 2px solid currentColor; border-radius: 2px; }
+.risk-meter i:nth-child(1) { height: 10px; }
+.risk-meter i:nth-child(2) { height: 16px; }
+.risk-meter i:nth-child(3) { height: 22px; }
+.risk-meter i.on { background: currentColor; }
+.risk-counts { margin: 0 0 8px; }
+.risk-counts div { background: var(--surface); border-left-width: 6px; }
+.risk-counts .alert { border-left-color: var(--red); }
+.risk-counts .attention { border-left-color: #c98a00; }
+.risk-counts .moderate { border-left-color: var(--ink-2); }
+.risk-counts dd small { font-size: 1rem; font-weight: 400; }
+.genetics-section { margin-top: 32px; }
+.genetics-section > .note { margin-top: -4px; }
+.risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+.risk-card { padding: 16px 20px; background: var(--surface); border: 1px solid var(--line); border-left: 6px solid var(--line-strong); border-radius: var(--radius); }
+.risk-card.alert { border-left-color: var(--red); }
+.risk-card.attention { border-left-color: #c98a00; }
+.risk-card.moderate { border-left-color: var(--ink-2); }
+.risk-card.diagnosed { border-left-color: var(--blue); }
+.risk-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.risk-card h3 { font-size: 1.33rem; margin: 0 0 10px; }
+.risk-card p { margin: 0 0 10px; }
+.risk-card p:last-child { margin-bottom: 0; }
+.risk-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.risk-who-label { flex-basis: 100%; font-size: .889rem; color: var(--ink-2); }
+.risk-who span:not(.risk-who-label) { padding: 2px 12px; border: 1px solid var(--line-strong); border-radius: 4px; font-weight: 600; }
+.risk-do { padding: 10px 14px; border-radius: var(--radius); background: var(--bg); }
+.risk-rest { padding-top: 8px; padding-bottom: 8px; }
+.risk-rest-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.risk-rest-row:last-child { border-bottom: 0; }
+.risk-rest-row strong { font-weight: 600; }
+.risk-key { margin-top: 16px; }
+.risk-key h3 { margin-bottom: 8px; }
+.risk-key ul { list-style: none; padding: 0; margin: 0; }
+.risk-key li { display: grid; grid-template-columns: 150px 40px 1fr; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.risk-key li:last-child { border-bottom: 0; padding-bottom: 0; }
 .member-count { margin-top: 12px; max-width: 280px; }
 
 /* History */
@@ -458,7 +498,9 @@ body.viewing .own-only { display: none !important; }
   .status-panel { padding: 24px 16px; }
   .status-panel .btn.primary { width: 100%; }
   .reading-list, .care-list { padding: 0 16px; }
-  .field-grid, .trend-grid, .facts-2col, .tip-grid { grid-template-columns: 1fr; }
+  .field-grid, .trend-grid, .facts-2col, .tip-grid, .risk-grid { grid-template-columns: 1fr; }
+  .risk-key li { grid-template-columns: 1fr auto; }
+  .risk-key li span:last-child { grid-column: 1 / -1; }
   #measurement-form .field-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .status-panel, .emergency { scroll-margin-bottom: 80px; }
   .tip-card { grid-template-columns: 96px 1fr; gap: 14px; padding: 14px; }
@@ -469,6 +511,9 @@ body.viewing .own-only { display: none !important; }
   .ft-join-c { margin-top: -8px; }
   .ft-father, .ft-mother { margin-top: 8px; width: auto; justify-self: stretch; }
   .score-list { grid-template-columns: 1fr; }
+  .risk-counts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .risk-counts div { padding: 10px 8px 10px 10px; }
+  .risk-counts .risk-level { flex-direction: column; align-items: flex-start; gap: 4px; }
   .panel-heading { flex-direction: column; }
   .inline-select { width: 100%; }
   .inline-select select { flex: 1; min-width: 0; }
