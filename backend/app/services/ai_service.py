@@ -3,13 +3,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
+import re
+from datetime import date
 from typing import Any
 
 import httpx
 from openai import AsyncOpenAI
+from pydantic import ValidationError
 
 from ..config import Settings
 from ..schemas import AIInsight, AssessmentCreate, AssessmentResult, MedicalDocumentAnalysis
+
+
+logger = logging.getLogger(__name__)
 
 
 INSIGHT_SCHEMA = {
@@ -54,7 +61,8 @@ MEDICAL_DOCUMENT_SCHEMA = {
             "type": "string",
             "enum": ["lab_result", "prescription", "discharge_note", "imaging_report", "vaccination", "other"],
         },
-        "document_date": {"anyOf": [{"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}, {"type": "null"}]},
+        "document_date": {"description": "Date printed on the document, written as YYYY-MM-DD.",
+                          "anyOf": [{"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}, {"type": "null"}]},
         "provider": {"type": "string", "maxLength": 180},
         "title": {"type": "string", "minLength": 1, "maxLength": 180},
         "summary": {"type": "string", "minLength": 1, "maxLength": 1200},
@@ -136,7 +144,7 @@ def _gemini_schema(value: Any) -> Any:
         # Some Flash deployments reject nullable type arrays in complex schemas.
         # An empty string is normalized to None before Pydantic validation.
         result["type"] = "string"
-        result["description"] = "Use an empty string when this value is unknown."
+        result["description"] = (value.get("description", "") + " Use an empty string when this value is unknown.").strip()
         return result
     if isinstance(nullable, list) and {item.get("type") for item in nullable if isinstance(item, dict)} == {"number", "null"}:
         # Same workaround for numbers; 0 is normalized to None before Pydantic validation.
@@ -154,10 +162,43 @@ class AIServiceError(RuntimeError):
     """Safe, user-facing provider error without credentials or response bodies."""
 
 
+def _document_date(value: Any) -> str | None:
+    """Vietnamese documents print the day first; the model often copies that instead of converting it."""
+    text = str(value or "")
+    # Year first only where the year starts the date, so the end of "01/10/2026-05/10/2026" is not read as one.
+    for pattern, order in ((r"(?<![\d/.-])(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})", (0, 1, 2)),
+                           (r"(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{4})", (2, 1, 0)),
+                           (r"(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})", (2, 1, 0))):
+        found = re.search(pattern, text, re.IGNORECASE)
+        if found:
+            try:
+                return date(*(int(found.groups()[index]) for index in order)).isoformat()
+            except ValueError:
+                return None
+    return None
+
+
+def _clamp(value: Any, schema: dict[str, Any]) -> Any:
+    """Cut the answer to the schema's limits. Gemini is never told them (see _gemini_schema), and one long
+    sentence or an extra key should not throw away a whole scan."""
+    if isinstance(value, str) and "maxLength" in schema:
+        return value[:schema["maxLength"]]
+    if isinstance(value, list) and schema.get("type") == "array":
+        return [_clamp(item, schema.get("items", {})) for item in value[:schema.get("maxItems")]]
+    if isinstance(value, dict) and schema.get("type") == "object":
+        return {key: _clamp(item, schema["properties"][key]) for key, item in value.items() if key in schema["properties"]}
+    return value
+
+
 def _medical_analysis_from_json(output: str) -> MedicalDocumentAnalysis:
-    data = json.loads(output)
-    if data.get("document_date") in {"", "null", "unknown", None}:
-        data["document_date"] = None
+    data = _clamp(json.loads(output), MEDICAL_DOCUMENT_SCHEMA)
+    # An unreadable date is left empty for the user to type in, not treated as a failed scan.
+    data["document_date"] = _document_date(data.get("document_date"))
+    # A row the model left blank would fail validation, and it carries nothing worth keeping.
+    data["metrics"] = [item for item in data.get("metrics") or [] if isinstance(item, dict)
+                       and str(item.get("name") or "").strip() and str(item.get("value") or "").strip()]
+    data["medications"] = [item for item in data.get("medications") or [] if isinstance(item, dict)
+                           and str(item.get("name") or "").strip()]
     if not str(data.get("title") or "").strip():
         data["title"] = "Tài liệu sức khỏe cần xem lại"
         data["review_required"] = True
@@ -243,9 +284,9 @@ class AIInsightService:
                     last_status = response.status_code
                     if response.is_success:
                         break
-                    if response.status_code == 404:
-                        break  # Try the fallback model.
-                    if response.status_code in {408, 429, 500, 502, 503, 504} and attempt < 2:
+                    if response.status_code in {404, 429}:
+                        break  # Try the fallback model: a missing model or a used-up quota does not recover in seconds.
+                    if response.status_code in {408, 500, 502, 503, 504} and attempt < 2:
                         await asyncio.sleep(1.25 * (2 ** attempt))
                         continue
                     break
@@ -254,16 +295,19 @@ class AIInsightService:
         if response is None or not response.is_success:
             if last_status in {401, 403}:
                 raise AIServiceError("Khóa Gemini không hợp lệ, đã bị chặn hoặc chưa có quyền dùng Gemini API.")
-            if last_status == 429:
-                raise AIServiceError("Gemini đã đạt giới hạn sử dụng. Hãy chờ một lúc hoặc kiểm tra quota trong AI Studio.")
-            if last_status in {500, 502, 503, 504}:
-                raise AIServiceError("Gemini đang quá tải. GeneSense đã thử lại và đổi model dự phòng nhưng chưa thành công.")
+            if last_status in {429, 500, 502, 503, 504}:
+                # Out of quota or the provider is down: the person scanning can only wait either way.
+                raise AIServiceError("Tính năng đọc ảnh đang quá tải. Hãy thử lại sau ít phút.")
             if last_status == 404:
                 raise AIServiceError("Các model Gemini đã cấu hình chưa khả dụng với khóa này.")
             if last_status == 400:
                 raise AIServiceError("Gemini từ chối cấu trúc yêu cầu. Hãy cập nhật backend GeneSense lên bản mới nhất.")
             raise AIServiceError("Không thể kết nối với Gemini lúc này.")
         data = response.json()
+        finish = (data.get("candidates") or [{}])[0].get("finishReason")
+        if finish not in (None, "STOP"):
+            # A cut-off answer is not valid JSON; the reason tells a token limit from a safety block.
+            logger.warning("Gemini stopped early: %s", finish)
         try:
             text_parts = data["candidates"][0]["content"]["parts"]
             output = "".join(part.get("text", "") for part in text_parts).strip()
@@ -364,6 +408,12 @@ class AIInsightService:
                 return MedicalDocumentAnalysis.model_validate_json(response.output_text)
         except AIServiceError:
             raise
+        except httpx.HTTPError as error:
+            logger.warning("Document analysis could not reach the AI provider: %s", type(error).__name__)
+            raise AIServiceError("Chưa kết nối được với AI. Hãy thử lại sau ít phút.") from error
         except Exception as error:
-            raise AIServiceError("AI không thể kiểm tra kết quả trích xuất. Hãy thử ảnh rõ hơn.") from error
+            # Field names and error types only: the answer itself is health data and stays out of the log.
+            detail = error.errors(include_input=False, include_url=False) if isinstance(error, ValidationError) else ""
+            logger.warning("Document analysis answer rejected: %s %s", type(error).__name__, detail)
+            raise AIServiceError("AI trả về kết quả chưa dùng được. Hãy thử lại; nếu vẫn lỗi, chụp lại ảnh rõ hơn.") from error
         raise AIServiceError("Nhà cung cấp AI chưa sẵn sàng.")

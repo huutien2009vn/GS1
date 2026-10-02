@@ -526,6 +526,9 @@ body.viewing .own-only { display: none !important; }
   .reading-list, .care-list { padding: 0 16px; }
   .field-grid, .trend-grid, .facts-2col, .tip-grid, .risk-grid { grid-template-columns: 1fr; }
   .risk-key li { grid-template-columns: 1fr auto; }
+  /* The status tag does not wrap, so on a phone it takes its own line under the name and the value. */
+  .extracted-metrics > div { grid-template-columns: 1fr auto; }
+  .extracted-metrics .tag { grid-column: 1 / -1; justify-self: start; }
   .risk-key li span:last-child { grid-column: 1 / -1; }
   #measurement-form .field-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .status-panel, .emergency { scroll-margin-bottom: 80px; }
