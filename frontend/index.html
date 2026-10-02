@@ -23,7 +23,7 @@
     <main class="login-main">
       <div class="panel login-card">
         <h1 id="login-title">Đăng nhập</h1>
-        <p>Đăng nhập để lưu hồ sơ và xem lại chỉ số trên mọi thiết bị.</p>
+        <p>Đăng nhập để lưu hồ sơ.</p>
         <button id="google-login" class="btn google-button full-width" disabled><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.8-3.5 6.1-8.7 6.1-14.9Z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.9l-6.6-5c-1.8 1.2-4.1 1.9-6.9 1.9-5.3 0-9.9-3.6-11.5-8.4H5.7v5.2A20.4 20.4 0 0 0 24 44Z"/><path fill="#FBBC05" d="M12.5 27.6A12 12 0 0 1 12 24c0-1.3.2-2.5.6-3.6v-5.2H5.7A20 20 0 0 0 4 24c0 3.2.8 6.2 2.1 8.8l6.4-5.2Z"/><path fill="#EA4335" d="M24 12c3 0 5.7 1 7.8 3.1l5.8-5.8A19.7 19.7 0 0 0 24 4c-7.8 0-14.5 4.5-17.9 11.2l6.4 5.2C14.1 15.6 18.7 12 24 12Z"/></svg>Đăng nhập bằng Google</button>
         <p id="login-message" class="note hidden" role="status"></p>
         <div id="demo-entry" class="demo-entry hidden">
@@ -39,7 +39,7 @@
     <header class="site-header"><div class="site-header-inner"><a class="brand" href="/"><img src="/assets/favicon.svg" width="36" height="36" alt=""><span><strong>GeneSense</strong><small>Theo dõi sức khỏe và sàng lọc bệnh mạn tính</small></span></a><button class="header-link" id="onboarding-exit">Đăng xuất</button></div></header>
     <main class="page onboarding-page">
       <h1 id="onboarding-title">Khai báo hồ sơ sức khỏe</h1>
-      <p class="lead">Thông tin chỉ hiển thị trong tài khoản của bạn. Có thể sửa lại bất kỳ lúc nào.</p>
+      <p class="lead">Có thể sửa lại sau.</p>
       <form id="onboarding-form" class="panel onboarding-form" novalidate>
         <div class="step-progress"><span id="step-caption">Bước 1 trên 3</span><progress id="onboarding-progress" value="1" max="3" aria-label="Tiến độ khai báo"></progress></div>
         <section data-step="0">
@@ -51,7 +51,7 @@
             <label>Chiều cao (cm)<input id="height" type="number" inputmode="decimal" min="80" max="250" step=".1" required></label>
             <label>Cân nặng (kg)<input id="weight" type="number" inputmode="decimal" min="20" max="350" step=".1" required></label>
           </div>
-          <p class="note" id="bmi-output">Chỉ số BMI được tính từ chiều cao và cân nặng.</p>
+          <p class="note" id="bmi-output"></p>
           <fieldset class="chip-field"><legend>Bệnh đã được bác sĩ chẩn đoán (nếu có)</legend><div id="personal-conditions" class="chips"></div></fieldset>
           <div class="field-grid habits"><label>Số phút vận động mỗi tuần<input id="activity" type="number" inputmode="numeric" min="0" max="3000" value="0"></label><label class="check-label"><input type="checkbox" id="smoker"><span>Tôi đang hút thuốc</span></label></div>
           <details class="optional"><summary>Thêm ghi chú (không bắt buộc)</summary><label class="block-label">Ghi chú về sức khỏe của bạn<textarea id="personal-notes" rows="3" maxlength="2000"></textarea></label></details>
@@ -73,7 +73,7 @@
           </details>
           <div class="consent-section">
             <label class="check-label"><input id="health-consent" type="checkbox" required><span>Tôi đồng ý lưu thông tin sức khỏe đã khai báo trong tài khoản này.</span></label>
-            <label class="check-label"><input id="ai-consent" type="checkbox"><span>Cho phép dùng AI để giải thích kết quả (không bắt buộc).<small>Chỉ gửi chỉ số, thể trạng và bệnh đã chọn đến Google Gemini. Không gửi tên, email hay ghi chú.</small></span></label>
+            <label class="check-label"><input id="ai-consent" type="checkbox"><span>Cho phép dùng AI để giải thích kết quả (không bắt buộc).<small>Chỉ gửi chỉ số, thể trạng và bệnh đã chọn đến Google Gemini.</small></span></label>
           </div>
         </section>
         <p id="onboarding-error" class="inline-message error hidden" role="alert"></p>
@@ -89,11 +89,11 @@
         <button data-nav="dashboard" class="active">Hôm nay</button>
         <button data-nav="history">Lịch sử đo</button>
         <button data-nav="genetics">Di truyền</button>
-        <button data-nav="records" class="own-only">Giấy tờ</button>
+        <button data-nav="records" class="own-only">Thuốc và giấy tờ</button>
         <button data-nav="profile">Hồ sơ</button>
       </div></nav>
     </header>
-    <div id="demo-banner" class="demo-banner hidden">Bạn đang dùng hồ sơ mẫu. Dữ liệu không phải dữ liệu sức khỏe thật.</div>
+    <div id="demo-banner" class="demo-banner hidden">Hồ sơ mẫu, không phải dữ liệu thật.</div>
     <div id="viewing-banner" class="viewing-banner hidden"><span id="viewing-text"></span><button id="exit-viewing" class="btn outline">Về hồ sơ của tôi</button></div>
     <main id="main-content" class="page">
       <section id="dashboard-view" class="view">
@@ -116,11 +116,12 @@
           <p id="recent-emergency" class="inline-message warning hidden"></p>
           <div id="result-alerts" class="result-alerts" aria-live="polite"></div>
           <button class="btn primary own-only" id="new-measurement">Ghi chỉ số</button>
+          <button id="today-medicines" class="link-button today-medicines own-only hidden" data-open-medicines></button>
           <details id="score-details" class="score-details hidden"><summary>Cách tính kết quả</summary>
             <p>Điểm sàng lọc: <strong id="risk-score">-</strong> trên 100. Điểm càng thấp càng tốt.</p>
             <dl class="score-list"><div><dt>Tiền sử gia đình</dt><dd id="pgrs-score">-</dd></div><div><dt>Thể trạng</dt><dd id="brs-score">-</dd></div><div><dt>Chỉ số đo</dt><dd id="vital-score">-</dd></div></dl>
             <p id="score-family-note" class="note hidden"></p>
-            <p class="note">Điểm minh họa, không phải xác suất mắc bệnh hay kết quả xét nghiệm gen. Chỉ số chưa đo không được tính là bình thường.</p>
+            <p class="note">Điểm minh họa, không phải chẩn đoán.</p>
             <button class="link-button" data-nav="genetics">Xem nguy cơ theo từng bệnh</button>
           </details>
         </article>
@@ -150,7 +151,7 @@
             <article class="panel trend-card" data-trend="spo2"><div class="trend-head"><h3>Oxy trong máu <small>SpO₂, %</small></h3><p class="trend-latest"></p></div><div class="trend-chart" tabindex="0" aria-describedby="trend-spo2-summary"></div><p class="trend-empty note">Chưa có lần đo SpO₂.</p><p id="trend-spo2-summary" class="visually-hidden"></p></article>
             <article class="panel trend-card" data-trend="glucose"><div class="trend-head"><h3>Đường huyết <small>mg/dL</small></h3><p class="trend-latest"></p></div><div class="trend-chart" tabindex="0" aria-describedby="trend-glucose-summary"></div><p class="trend-empty note">Chưa có lần đo đường huyết.</p><p id="trend-glucose-summary" class="visually-hidden"></p></article>
           </div>
-          <p class="note">Vùng nền xanh là ngưỡng an toàn tham khảo; với huyết áp, đường nét đứt là ngưỡng cao. Rê chuột hoặc dùng phím mũi tên trên biểu đồ để xem từng lần đo.</p>
+          <p class="note">Nền xanh: ngưỡng an toàn. Nét đứt: ngưỡng cao.</p>
         </section>
         <section class="section advice" aria-labelledby="advice-title">
           <div class="section-heading"><h2 id="advice-title">Lời khuyên cho bạn</h2></div>
@@ -165,9 +166,19 @@
       </section>
 
       <section id="records-view" class="view hidden">
-        <div class="page-heading"><div><h1>Giấy tờ sức khỏe</h1><p class="lead">Kết quả xét nghiệm, đơn thuốc, giấy khám.</p></div><button class="btn primary" id="upload-record">Thêm ảnh giấy tờ</button></div>
-        <p id="records-ai-off" class="note hidden">Tính năng đọc ảnh giấy tờ sẽ có trong bản chính thức.</p>
-        <div id="medical-record-list" class="medical-record-list"></div>
+        <div class="page-heading"><div><h1>Thuốc và giấy tờ</h1><p class="lead">Kết quả xét nghiệm, đơn thuốc, giấy khám.</p></div><button class="btn primary" id="upload-record">Thêm ảnh giấy tờ</button></div>
+        <div class="measurement-tabs" role="group" aria-label="Nội dung trang"><button data-records-tab="medicines">Lịch uống thuốc</button><button data-records-tab="documents">Giấy tờ đã lưu</button></div>
+        <div id="medicines-panel" class="records-panel hidden">
+          <section class="section" aria-labelledby="medicine-today-title">
+            <div class="section-heading"><h2 id="medicine-today-title">Thuốc hôm nay</h2><button class="btn outline" id="add-medicine">Thêm thuốc</button></div>
+            <div id="medicine-today"></div>
+          </section>
+          <details id="medicine-all" class="record-details medicine-all hidden"><summary id="medicine-list-title">Tất cả thuốc</summary><div id="medicine-list"></div></details>
+        </div>
+        <div id="documents-panel" class="records-panel">
+          <p id="records-ai-off" class="note hidden">Tính năng đọc ảnh giấy tờ sẽ có trong bản chính thức.</p>
+          <div id="medical-record-list" class="medical-record-list"></div>
+        </div>
       </section>
 
       <section id="profile-view" class="view hidden">
@@ -191,14 +202,21 @@
     <p id="measurement-error" class="inline-message error hidden" role="alert"></p>
   </dialog>
   <dialog id="avatar-dialog"><div class="dialog-heading"><h2>Chọn vùng ảnh</h2><button class="icon-button" data-close="avatar-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><p>Kéo ảnh để chọn phần nằm trong vòng tròn.</p><div class="crop-box"><canvas id="avatar-canvas" width="280" height="280" tabindex="0" aria-label="Vùng ảnh. Dùng phím mũi tên để di chuyển ảnh."></canvas></div><label for="avatar-zoom">Phóng to</label><input type="range" id="avatar-zoom" min="1" max="3" step="0.01" value="1"><div class="dialog-actions"><button type="button" class="btn outline" data-close="avatar-dialog">Hủy</button><button type="button" id="avatar-save" class="btn primary">Lưu ảnh</button></div></dialog>
-  <dialog id="scan-dialog"><div class="dialog-heading"><h2>Ảnh giấy tờ gốc</h2><button class="icon-button" data-close="scan-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><p class="note">Ảnh chỉ lưu trên thiết bị này. Đổi thiết bị hoặc xóa dữ liệu trình duyệt sẽ làm mất ảnh.</p><img id="scan-image" class="scan-image" alt="Ảnh giấy tờ gốc"><div class="dialog-actions"><a id="scan-save" class="btn outline" download>Lưu ảnh</a><button type="button" class="btn primary" data-close="scan-dialog">Đóng</button></div></dialog>
+  <dialog id="scan-dialog"><div class="dialog-heading"><h2>Ảnh giấy tờ gốc</h2><button class="icon-button" data-close="scan-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><p class="note">Ảnh chỉ lưu trên thiết bị này.</p><img id="scan-image" class="scan-image" alt="Ảnh giấy tờ gốc"><div class="dialog-actions"><a id="scan-save" class="btn outline" download>Lưu ảnh</a><button type="button" class="btn primary" data-close="scan-dialog">Đóng</button></div></dialog>
   <dialog id="result-dialog"><div class="dialog-heading"><h2>Chi tiết lần đo</h2><button class="icon-button" data-close="result-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><div id="result-detail"></div><div class="record-actions own-only"><button id="delete-assessment" class="delete-record">Xóa lần đo này</button></div></dialog>
+  <dialog id="medicine-dialog" aria-labelledby="medicine-title"><div class="dialog-heading"><h2 id="medicine-title">Thêm thuốc</h2><button type="button" class="icon-button" data-close="medicine-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
+    <form id="medicine-form"><div class="field-grid"><label class="full">Tên thuốc<input name="name" required maxlength="160" autocomplete="off" autofocus></label><label>Hàm lượng (ví dụ 500 mg)<input name="strength" maxlength="60" autocomplete="off"></label><label>Mỗi lần uống (ví dụ 1 viên)<input name="amount" maxlength="60" autocomplete="off"></label></div>
+      <fieldset class="slot-group"><legend>Uống vào buổi nào</legend><div class="chips"><label><input type="checkbox" name="morning">Sáng</label><label><input type="checkbox" name="noon">Trưa</label><label><input type="checkbox" name="afternoon">Chiều</label><label><input type="checkbox" name="evening">Tối</label><label><input type="checkbox" name="as_needed">Khi cần</label></div></fieldset>
+      <label>Uống trước hay sau ăn<select name="meal"><option value="any">Không ghi trên đơn</option><option value="before">Trước ăn</option><option value="after">Sau ăn</option></select></label>
+      <details id="medicine-more" class="record-details"><summary>Thêm chi tiết</summary><div class="field-grid"><label>Ngày bắt đầu<input name="start_date" type="date" required min="1950-01-01"></label><label>Số ngày uống (để trống nếu uống lâu dài)<input name="days" type="number" inputmode="numeric" min="1" max="365" step="1"></label><label class="full">Ghi chú<input name="note" maxlength="200" autocomplete="off"></label></div></details>
+      <p id="medicine-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions sticky-actions"><button type="button" id="medicine-delete" class="delete-record hidden">Xóa thuốc này</button><button type="button" class="btn outline" data-close="medicine-dialog">Hủy</button><button class="btn primary" type="submit">Lưu thuốc</button></div></form>
+  </dialog>
   <dialog id="medical-upload-dialog" class="medical-upload-dialog"><div class="dialog-heading"><h2>Thêm ảnh giấy tờ</h2><button class="icon-button" data-close="medical-upload-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
     <div id="upload-stage"><p class="note">Chụp rõ toàn bộ giấy tờ, tránh bị lóa.</p><label class="document-drop" for="medical-document-file"><input id="medical-document-file" type="file" accept="image/jpeg,image/png,image/webp"><strong>Chọn ảnh</strong><small>JPG, PNG hoặc WebP, tối đa 8 MB</small><img id="document-preview" class="hidden" alt="Ảnh giấy tờ đã chọn"></label>
-      <label class="check-label upload-consent"><input id="document-ai-consent" type="checkbox"><span>Tôi đồng ý gửi ảnh này đến <strong id="document-ai-provider">Google Gemini</strong> để đọc nội dung.<small>Ảnh có thể chứa thông tin sức khỏe, và nhà cung cấp AI có thể dùng nội dung này để cải thiện dịch vụ của họ. Nên che họ tên và mã số trước khi chụp. GeneSense chỉ giữ ảnh gốc trên thiết bị này.</small></span></label>
+      <label class="check-label upload-consent"><input id="document-ai-consent" type="checkbox"><span>Tôi đồng ý gửi ảnh này đến <strong id="document-ai-provider">Google Gemini</strong> để đọc nội dung.<small>AI có thể dùng ảnh để cải thiện dịch vụ. Nên che họ tên và mã số.</small></span></label>
       <p id="document-error" class="inline-message error hidden" role="alert"></p><button id="analyze-document" class="btn primary full-width" disabled>Đọc nội dung ảnh</button>
     </div>
-    <div id="review-stage" class="hidden"><h3>Kiểm tra trước khi lưu</h3><p class="note">Nội dung do AI đọc có thể sai. Hãy đối chiếu với giấy tờ gốc.</p><div id="document-analysis-preview"></div><form id="document-apply" class="document-apply"></form><label class="check-label confirm-record"><input id="confirm-medical-record" type="checkbox"><span>Tôi đã kiểm tra và muốn lưu nội dung này.</span></label><p id="record-save-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions"><button id="analyze-another" class="btn outline">Chọn ảnh khác</button><button id="save-medical-record" class="btn primary" disabled>Lưu vào hồ sơ</button></div></div>
+    <div id="review-stage" class="hidden"><h3>Kiểm tra trước khi lưu</h3><p class="note">AI có thể đọc sai. Hãy so với giấy gốc.</p><div id="document-analysis-preview"></div><form id="document-apply" class="document-apply"></form><label class="check-label confirm-record"><input id="confirm-medical-record" type="checkbox"><span>Tôi đã kiểm tra và muốn lưu nội dung này.</span></label><p id="record-save-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions"><button id="analyze-another" class="btn outline">Chọn ảnh khác</button><button id="save-medical-record" class="btn primary" disabled>Lưu vào hồ sơ</button></div></div>
   </dialog>
   <section id="report-screen" class="report-screen hidden" aria-labelledby="report-title">
     <div class="report-toolbar"><button class="btn outline" id="report-back">Quay lại</button><label class="inline-select">Kỳ báo cáo<select id="report-days"><option value="7">7 ngày</option><option value="30" selected>30 ngày</option><option value="90">90 ngày</option></select></label><button class="btn primary" id="report-print">In / Lưu PDF</button></div>

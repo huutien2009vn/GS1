@@ -19,10 +19,11 @@ from .care import current_vital_score, router as care_router
 from .config import get_settings
 from .database import engine, get_session
 from .migrations import migrate_schema
-from .models import Assessment, Avatar, Feedback, MedicalRecord, User
+from .models import Assessment, Avatar, Feedback, MedicalRecord, Medication, User
 from .schemas import (AccountProfile, AssessmentCreate, AssessmentHistoryItem, AssessmentResult,
                       FeedbackCreate, FeedbackResult, MedicalDocumentAnalyzeResult,
                       MedicalRecordCreate, MedicalRecordResult, MeasurementCreate)
+from .schemas import MedicationInput, MedicationResult
 from .services.ai_service import AIInsightService
 from .services.risk_engine import calculate_risk, risk_overview
 
@@ -316,6 +317,50 @@ async def delete_medical_record(
     await session.delete(record)
     await session.commit()
     return Response(status_code=204)
+
+
+MAX_MEDICATIONS = 60
+
+
+async def own_medication(medication_id: str, user: User, session: AsyncSession) -> Medication:
+    medication = await session.scalar(select(Medication).where(Medication.id == medication_id, Medication.user_id == user.id))
+    if not medication:
+        raise HTTPException(404, "Không tìm thấy thuốc này.")
+    return medication
+
+
+@app.get("/api/medications", response_model=list[MedicationResult])
+async def list_medications(user: User = Depends(current_user), session: AsyncSession = Depends(get_session)):
+    return list(await session.scalars(select(Medication).where(Medication.user_id == user.id).order_by(Medication.created_at)))
+
+
+@app.post("/api/medications", response_model=MedicationResult, status_code=201)
+async def add_medication(payload: MedicationInput, user: User = Depends(current_user),
+                         session: AsyncSession = Depends(get_session)):
+    count = len(list(await session.scalars(select(Medication.id).where(Medication.user_id == user.id))))
+    if count >= MAX_MEDICATIONS:
+        raise HTTPException(409, "Danh sách thuốc đã đầy. Hãy xóa thuốc không còn dùng.")
+    medication = Medication(user_id=user.id, **payload.model_dump(mode="json"))
+    session.add(medication)
+    await session.commit()
+    return medication
+
+
+@app.put("/api/medications/{medication_id}", response_model=MedicationResult)
+async def update_medication(medication_id: str, payload: MedicationInput, user: User = Depends(current_user),
+                            session: AsyncSession = Depends(get_session)):
+    medication = await own_medication(medication_id, user, session)
+    for key, value in payload.model_dump(mode="json").items():
+        setattr(medication, key, value)
+    await session.commit()
+    return medication
+
+
+@app.delete("/api/medications/{medication_id}", status_code=204)
+async def delete_medication(medication_id: str, user: User = Depends(current_user),
+                            session: AsyncSession = Depends(get_session)):
+    await session.delete(await own_medication(medication_id, user, session))
+    await session.commit()
 
 
 app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")

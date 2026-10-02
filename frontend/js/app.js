@@ -24,7 +24,7 @@ const METRICS = [
 ];
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
 const LEVELS = { safe: "Trong ngưỡng an toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
-const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Đo lại vào lần sau và ghi chép đều đặn.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
+const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Hãy đo lại.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
 const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu", document: "Từ giấy tờ" };
 // Readings copied from a scanned document are history: dated by the document and never the current state.
 const fromDocument = record => (record.vitals?.source || record.measurement_source) === "document";
@@ -48,7 +48,7 @@ const isReal = record => (record.vitals?.source || "manual") !== "simulation";
 const DOCUMENT_TYPES = { lab_result: "Kết quả xét nghiệm", prescription: "Đơn thuốc", discharge_note: "Giấy ra viện", imaging_report: "Kết quả chẩn đoán hình ảnh", vaccination: "Tiêm chủng", other: "Tài liệu sức khỏe" };
 const FLAG_NAMES = { normal: "Trong khoảng tham chiếu", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
 const state = { viewing: null, own: null, care: { patients: [], caregivers: [] }, user: null, health: null, records: [], result: null, risk: null, step: 0, editing: false, rating: 0,
-  medicalRecords: [], pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
+  medicalRecords: [], medications: [], recordsTab: null, editingMedicine: null, pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
   deviceSource: null, deviceValues: {}, deviceTimes: {}, samples: [], deviceEpoch: 0, authEpoch: 0, busy: false, view: "dashboard" };
 let ble = null;
 let simulator = null;
@@ -206,11 +206,11 @@ function navigate(view) {
     if (button.dataset.nav === state.view) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  document.title = { dashboard: "Hôm nay", records: "Giấy tờ sức khỏe", history: "Lịch sử đo", genetics: "Di truyền", profile: "Hồ sơ" }[state.view] + " - GeneSense";
+  document.title = { dashboard: "Hôm nay", records: "Thuốc và giấy tờ", history: "Lịch sử đo", genetics: "Di truyền", profile: "Hồ sơ" }[state.view] + " - GeneSense";
   window.history.replaceState(null, "", "#" + state.view);
   if (state.view === "profile") renderProfile();
   if (state.view === "genetics") renderGenetics();
-  if (state.view === "records") renderMedicalRecords();
+  if (state.view === "records") { renderMedicalRecords(); renderRecordsTab(); }
   if (state.view === "history") { renderHistory(); renderTips(); renderTrends(); }
   window.scrollTo(0, 0);
 }
@@ -248,7 +248,7 @@ function fillWizard(health = null) {
 }
 function updateBmi() {
   const h = Number($("#height").value) / 100, w = Number($("#weight").value);
-  $("#bmi-output").textContent = h > 0 && w > 0 ? "Chỉ số BMI: " + num(w / h ** 2) : "Chỉ số BMI được tính từ chiều cao và cân nặng.";
+  $("#bmi-output").textContent = h > 0 && w > 0 ? "Chỉ số BMI: " + num(w / h ** 2) : "";
 }
 function showStep() {
   $$("[data-step]").forEach(el => el.hidden = Number(el.dataset.step) !== state.step);
@@ -373,9 +373,9 @@ const dailyTip = () => DAILY_TIPS[Math.floor((Date.now() - new Date().getTimezon
 const tipCard = (tip, image, label = "") => '<article class="tip-card' + (label ? " daily" : "") + '"><img src="' + image + '" alt="" width="160" height="160" loading="lazy" decoding="async"><div>' + (label ? '<p class="tip-label">' + label + "</p>" : "") + "<h3>" + esc(tip.title) + "</h3><p>" + esc(tip.action) + "</p>" + (tip.reason ? '<p class="note">' + esc(tip.reason) + "</p>" : "") + "</div></article>";
 function renderTips() {
   const tips = state.result?.insight.tips || [
-    { title: "Bắt đầu với một chỉ số", action: "Có thể chỉ nhập huyết áp hoặc nhịp tim. Không cần đủ tất cả chỉ số.", image: "blood-pressure" },
+    { title: "Bắt đầu với một chỉ số", action: "Chỉ cần nhập một chỉ số.", image: "blood-pressure" },
     { title: "Đo trong cùng điều kiện", action: "Ngồi nghỉ 5 phút trước khi đo và làm theo hướng dẫn của máy đo." },
-    { title: "Hỏi thêm người thân", action: "Nếu chưa rõ tiền sử bệnh trong gia đình, hãy hỏi bố mẹ rồi cập nhật hồ sơ." },
+    { title: "Hỏi thêm người thân", action: "Chưa rõ tiền sử? Hãy hỏi bố mẹ." },
   ];
   const daily = dailyTip();
   const cards = tips.slice(0, 4).map(tip => tipCard(tip, tipImage(tip)));
@@ -410,7 +410,7 @@ function renderDashboard() {
   const status = $("#risk-status");
   status.className = "status-word " + ({ emergency: "alert", watch: "attention" }[level] || level);
   status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
-  $("#risk-summary").textContent = !r ? "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên." : level === "emergency" ? SUMMARY_FALLBACK.emergency : level === "watch" ? "Lần đo mới nhất đã trở lại ngưỡng an toàn, nhưng trong 24 giờ qua có lần đo ở mức nguy hiểm." : r.insight.summary || SUMMARY_FALLBACK[level];
+  $("#risk-summary").textContent = !r ? "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên." : level === "emergency" ? SUMMARY_FALLBACK.emergency : level === "watch" ? "24 giờ qua có lần đo ở mức nguy hiểm." : r.insight.summary || SUMMARY_FALLBACK[level];
   $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() : "";
   // While the emergency panel is up it is the only call to action; the score would read as reassurance.
   $("#score-details").classList.toggle("hidden", !r || level === "emergency");
@@ -421,6 +421,7 @@ function renderDashboard() {
   renderScores();
   renderMetrics();
   renderTips();
+  renderMedicineLink();
 }
 // Charts show what the readings table shows: whole numbers, except SpO₂ which keeps one decimal.
 const chartValue = (key, value) => key === "spo2" ? value : Math.round(value);
@@ -504,7 +505,7 @@ async function showResult(id) {
     const r = await reader().assessment(id);
     if (epoch !== state.authEpoch) return;
     const level = levelOf(r);
-    $("#result-detail").innerHTML = '<p class="note">' + (fromDocument(r) ? "Ghi trên giấy tờ ngày " + when(r) : "Đo lúc " + when(r) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase())) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" && !fromDocument(r) ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + (fromDocument(r) ? "Đây là số liệu cũ ghi trên giấy tờ, không phản ánh tình trạng hiện tại." : esc(r.insight.summary)) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + (fromDocument(r) ? "" : alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : ""));
+    $("#result-detail").innerHTML = '<p class="note">' + (fromDocument(r) ? "Ghi trên giấy tờ ngày " + when(r) : "Đo lúc " + when(r) + ", " + esc(SOURCE_NAMES[r.measurement_source].toLowerCase())) + '</p><span class="tag ' + (level === "emergency" ? "alert" : level) + '">' + LEVELS[level] + "</span>" + (level === "emergency" && !fromDocument(r) ? '<p class="detail-gap"><a class="btn danger" href="tel:115">Gọi cấp cứu 115</a></p>' : "") + '<p class="detail-gap">' + (fromDocument(r) ? "Số liệu cũ từ giấy tờ." : esc(r.insight.summary)) + '</p><div class="result-detail-vitals">' + METRICS.map(m => "<div><span>" + m.label + "</span><strong>" + (r.measured_vitals?.[m.key] == null ? "Chưa đo" : withUnit(valueOf(m.key, r.measured_vitals), m.unit)) + "</strong></div>").join("") + "</div>" + (fromDocument(r) ? "" : alertsMarkup(r) + (r.insight.follow_up ? '<p class="note">' + esc(r.insight.follow_up) + "</p>" : ""));
     $("#delete-assessment").dataset.id = r.id;
     $("#result-dialog").showModal();
   } catch (error) { toast(error.message, "error"); }
@@ -891,38 +892,141 @@ function applyMarkup(analysis) {
   const name = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const own = (analysis.own_conditions || []).filter(key => !state.health.profile.known_conditions.includes(key));
   const family = (analysis.family_conditions || []).filter(item => !state.health.family_history.find(row => row.member_id === item.member)?.conditions.includes(item.condition));
-  if (!found.length && !own.length && !family.length) return '<p class="note">Không thấy chỉ số huyết áp, nhịp tim, đường huyết, bệnh đã chẩn đoán hay tiền sử gia đình mới để đưa vào hồ sơ. Nội dung giấy tờ vẫn được lưu.</p>';
+  const medicines = analysis.medications || [];
+  if (!found.length && !own.length && !family.length && !medicines.length) return '<p class="note">Không thấy chỉ số huyết áp, nhịp tim, đường huyết, thuốc, bệnh đã chẩn đoán hay tiền sử gia đình mới để đưa vào hồ sơ. Nội dung giấy tờ vẫn được lưu.</p>';
   const check = (attribute, label) => '<label class="check-label"><input type="checkbox" ' + attribute + ' checked><span>' + label + "</span></label>";
-  return '<h3>Đưa vào hồ sơ</h3><p class="note">Bỏ chọn mục bạn không muốn đưa vào. Sửa lại số nếu AI đọc sai.</p>' +
-    (found.length ? '<fieldset class="apply-group"><legend>Chỉ số đo</legend>' + check('id="apply-vitals"', "Thêm vào Lịch sử đo với nguồn “Từ giấy tờ”<small>Số liệu trên giấy tờ là số liệu cũ, không thay đổi tình trạng ở trang Hôm nay.</small>") +
+  return '<h3>Đưa vào hồ sơ</h3>' +
+    (found.length ? '<fieldset class="apply-group"><legend>Chỉ số đo</legend>' + check('id="apply-vitals"', "Thêm vào Lịch sử đo với nguồn “Từ giấy tờ”<small>Số liệu cũ, không đổi tình trạng Hôm nay.</small>") +
       '<div class="field-grid">' + found.map(([key, label, min, max]) => "<label>" + label + '<input type="number" inputmode="decimal" step=".1" min="' + min + '" max="' + max + '" data-apply-vital="' + key + '" value="' + esc(vitals[key] == null ? "" : Math.round(vitals[key] * 10) / 10) + '"></label>').join("") +
       '<label>Ngày ghi trên giấy tờ<input type="date" id="apply-date" required min="1950-01-01" max="' + new Date().toLocaleDateString("sv") + '" value="' + esc(analysis.document_date || "") + '"></label></div></fieldset>' : "") +
     (own.length ? '<fieldset class="apply-group"><legend>Bệnh đã được chẩn đoán</legend>' + own.map(key => check('data-apply-own="' + esc(key) + '"', esc(name(key)))).join("") + "</fieldset>" : "") +
-    (family.length ? '<fieldset class="apply-group"><legend>Tiền sử gia đình</legend>' + family.map(item => check('data-apply-family="' + esc(item.member + "|" + item.condition) + '"', esc(MEMBERS.find(m => m.id === item.member).label + ": " + name(item.condition)))).join("") + "</fieldset>" : "");
+    (family.length ? '<fieldset class="apply-group"><legend>Tiền sử gia đình</legend>' + family.map(item => check('data-apply-family="' + esc(item.member + "|" + item.condition) + '"', esc(MEMBERS.find(m => m.id === item.member).label + ": " + name(item.condition)))).join("") + "</fieldset>" : "") +
+    (medicines.length ? '<fieldset class="apply-group"><legend>Thuốc trong đơn</legend><p class="note">So từng thuốc với đơn giấy.</p>' + medicines.map(applyMedicineMarkup).join("") + "</fieldset>" : "");
 }
-const documentVitals = () => Object.fromEntries([...$("#document-apply").querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
-// Runs after the document itself is saved. Profile changes repeat safely; the reading is last, so a retry cannot add it twice.
-async function applyDocument(vitals) {
-  const form = $("#document-apply");
-  const own = [...form.querySelectorAll("[data-apply-own]:checked")].map(el => el.dataset.applyOwn);
-  const family = [...form.querySelectorAll("[data-apply-family]:checked")].map(el => el.dataset.applyFamily.split("|"));
-  if (own.length || family.length) {
-    const health = structuredClone(state.health);
-    health.profile.known_conditions = [...new Set([...health.profile.known_conditions, ...own])];
-    for (const [id, condition] of family) {
-      const member = MEMBERS.find(m => m.id === id);
-      let row = health.family_history.find(item => item.member_id === id);
-      if (!row) health.family_history.push(row = { member_id: id, relation: member.relation, side: member.side, conditions: [] });
-      row.knowledge = "known"; row.conditions = [...new Set([...row.conditions, condition])];
-    }
-    const data = await api.saveProfile(health);
-    state.health = data.health; state.user = data.user;
-    await refreshRisk();
+// One card per medicine read from a prescription. A name the AI was not sure of starts unticked, so it cannot be saved unseen.
+function applyMedicineMarkup(m) {
+  const field = (label, key, value, extra = "") => "<label" + (key === "name" ? ' class="full"' : "") + ">" + label + '<input data-med="' + key + '" value="' + esc(value) + '" autocomplete="off" ' + extra + "></label>";
+  return '<div class="apply-medicine" data-apply-medicine>' +
+    '<label class="check-label"><input type="checkbox" data-med-on' + (m.unsure ? "" : " checked") + "><span>Thêm vào lịch uống thuốc</span></label>" +
+    (m.unsure ? '<p class="inline-message warning">Chữ viết không rõ. Hãy so với đơn giấy, sửa cho đúng rồi mới chọn thêm.</p>' : "") +
+    '<div class="field-grid">' + field("Tên thuốc", "name", m.name, 'required maxlength="160"') + field("Hàm lượng", "strength", m.strength, 'maxlength="60"') + field("Mỗi lần uống", "amount", m.dose, 'maxlength="60"') + "</div>" +
+    (m.frequency ? '<p class="note">Trên đơn ghi: ' + esc(m.frequency) + "</p>" : "") +
+    '<div class="chips" role="group" aria-label="Buổi uống">' + SLOTS.map(([key, label]) => '<label><input type="checkbox" data-med-slot="' + key + '"' + (m[key] ? " checked" : "") + ">" + label + "</label>").join("") + '<label><input type="checkbox" data-med-needed>Khi cần</label></div>' +
+    '<div class="field-grid"><label>Uống trước hay sau ăn<select data-med="meal">' + [["any", "Không ghi trên đơn"], ["before", "Trước ăn"], ["after", "Sau ăn"]].map(([value, label]) => '<option value="' + value + '"' + (m.meal === value ? " selected" : "") + ">" + label + "</option>").join("") + "</select></label>" +
+    field("Số ngày uống", "days", m.days || "", 'type="number" inputmode="numeric" min="1" max="365" step="1"') + "</div></div>";
+}
+// Unticked medicines are not saved, so their fields must not block the form.
+function syncApplyMedicines() {
+  $$("[data-apply-medicine]").forEach(card => {
+    const on = card.querySelector("[data-med-on]").checked;
+    card.querySelectorAll("[data-med], [data-med-slot], [data-med-needed]").forEach(el => { el.disabled = !on; });
+  });
+}
+
+const SLOTS = [["morning", "Sáng"], ["noon", "Trưa"], ["afternoon", "Chiều"], ["evening", "Tối"]];
+const MEALS = { before: "trước ăn", after: "sau ăn" };
+const localDay = (value = new Date()) => value.toLocaleDateString("sv");
+function medicineEnd(m) {
+  if (!m.days) return null;
+  const end = new Date(m.start_date + "T00:00:00");
+  end.setDate(end.getDate() + m.days - 1);
+  return localDay(end);
+}
+const medicineActive = (m, day = localDay()) => m.start_date <= day && (!m.days || medicineEnd(m) >= day);
+const medicineHow = m => [m.amount, MEALS[m.meal]].filter(Boolean).join(", ");
+function renderMedicineLink() {
+  const count = state.viewing ? 0 : state.medications.filter(m => medicineActive(m)).length;
+  const link = $("#today-medicines");
+  // The emergency panel stays the only call to action while it shows.
+  link.classList.toggle("hidden", !count || (state.result && isEmergency(state.result)));
+  link.textContent = "Hôm nay có " + count + " loại thuốc. Xem lịch uống thuốc";
+}
+function renderRecordsTab() {
+  const tab = state.recordsTab || (state.medications.length ? "medicines" : "documents");
+  $$("[data-records-tab]").forEach(button => {
+    button.classList.toggle("active", button.dataset.recordsTab === tab);
+    button.setAttribute("aria-pressed", String(button.dataset.recordsTab === tab));
+  });
+  $("#medicines-panel").classList.toggle("hidden", tab !== "medicines");
+  $("#documents-panel").classList.toggle("hidden", tab !== "documents");
+  renderMedicines();
+}
+function renderMedicines() {
+  const active = state.medications.filter(m => medicineActive(m));
+  const hour = new Date().getHours(), now = hour < 11 ? "morning" : hour < 14 ? "noon" : hour < 18 ? "afternoon" : "evening";
+  const title = m => esc(m.name + (m.strength ? " " + m.strength : ""));
+  const item = m => "<li><strong>" + title(m) + "</strong>" + (medicineHow(m) ? "<span>" + esc(medicineHow(m)) + "</span>" : "") + (m.note ? '<span class="note">' + esc(m.note) + "</span>" : "") + "</li>";
+  const block = (label, rows, current) => rows.length ? '<article class="panel slot"><h3>' + label + (current ? ' <span class="tag">Bây giờ</span>' : "") + "</h3><ul>" + rows.map(item).join("") + "</ul></article>" : "";
+  const blocks = SLOTS.map(([key, label]) => block(label, active.filter(m => m[key]), key === now)).join("") + block("Khi cần", active.filter(m => !SLOTS.some(([key]) => m[key])));
+  $("#medicine-today").innerHTML = blocks ? '<div class="slot-grid">' + blocks + '</div><p class="note">Nếu khác đơn giấy, hãy làm theo đơn và lời bác sĩ.</p>'
+    : '<article class="panel empty-state"><h3>Hôm nay không có thuốc trong lịch</h3><p class="note">Chụp đơn thuốc hoặc bấm Thêm thuốc.</p></article>';
+  const day = localDay();
+  const course = m => "Từ " + date(m.start_date + "T12:00:00", false) + (m.days ? ", " + m.days + " ngày" : ", uống lâu dài");
+  const tag = m => m.start_date > day ? '<span class="tag">Chưa bắt đầu</span>' : medicineActive(m, day) ? "" : '<span class="tag">Đã hết đợt</span>';
+  const when = m => SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần";
+  $("#medicine-all").classList.toggle("hidden", !state.medications.length);
+  $("#medicine-list-title").textContent = "Tất cả thuốc (" + state.medications.length + ")";
+  $("#medicine-list").innerHTML = '<ul class="panel medicine-rows">' + state.medications.map(m =>
+    "<li><div><strong>" + title(m) + "</strong><span>" + esc(when(m) + (medicineHow(m) ? ": " + medicineHow(m) : "")) + '</span><span class="note">' + esc(course(m)) + " " + tag(m) + "</span></div>" +
+    '<button class="btn outline" data-edit-medicine="' + esc(m.id) + '">Sửa</button></li>').join("") + "</ul>";
+  renderMedicineLink();
+}
+async function refreshMedications() {
+  const epoch = state.authEpoch;
+  try {
+    const rows = await api.medications();
+    if (epoch !== state.authEpoch) return;
+    state.medications = rows;
+  } catch (error) { if (epoch !== state.authEpoch) return; toast(error.message, "error"); }
+  renderMedicines();
+}
+function openMedicine(id) {
+  if (state.viewing) return;
+  const m = state.medications.find(item => item.id === id), form = $("#medicine-form");
+  state.editingMedicine = m ? m.id : null;
+  form.reset();
+  errorAt("#medicine-error");
+  $("#medicine-title").textContent = m ? "Sửa thuốc" : "Thêm thuốc";
+  $("#medicine-delete").classList.toggle("hidden", !m);
+  $("#medicine-more").open = Boolean(m && (m.days || m.note));
+  form.elements.start_date.value = m ? m.start_date : localDay();
+  if (m) {
+    ["name", "strength", "amount", "meal", "note"].forEach(key => { form.elements[key].value = m[key]; });
+    form.elements.days.value = m.days || "";
+    SLOTS.forEach(([key]) => { form.elements[key].checked = m[key]; });
+    form.elements.as_needed.checked = !SLOTS.some(([key]) => m[key]);
   }
-  if (vitals) {
-    await api.assess({ vitals, source: "document", measured_on: $("#apply-date").value });
-    await refreshRecords();
-  }
+  $("#medicine-dialog").showModal();
+}
+// "Khi cần" and the four times of day exclude each other, so "no fixed time" is always a choice the user made.
+function keepSlotChoice(target, slots, needed) {
+  if (target === needed && needed.checked) slots.forEach(box => { box.checked = false; });
+  else if (target.checked) needed.checked = false;
+}
+async function saveMedicine(event) {
+  event.preventDefault();
+  const form = $("#medicine-form");
+  if (state.busy) return;
+  if (!form.checkValidity()) $("#medicine-more").open = true; // a field inside closed details cannot show its message
+  if (!form.reportValidity()) return;
+  const slots = Object.fromEntries(SLOTS.map(([key]) => [key, form.elements[key].checked]));
+  if (!form.elements.as_needed.checked && !Object.values(slots).some(Boolean)) { errorAt("#medicine-error", "Hãy chọn buổi uống, hoặc chọn Khi cần."); return; }
+  state.busy = true;
+  const data = new FormData(form);
+  const body = { name: data.get("name"), strength: data.get("strength").trim(), amount: data.get("amount").trim(), meal: data.get("meal"), start_date: data.get("start_date"),
+    days: data.get("days") ? Number(data.get("days")) : null, note: data.get("note").trim(), ...slots };
+  try {
+    await api.saveMedication(body, state.editingMedicine);
+    await refreshMedications();
+    closeDialog($("#medicine-dialog"));
+    toast("Đã lưu thuốc.");
+  } catch (error) { errorAt("#medicine-error", error.message); }
+  finally { state.busy = false; }
+}
+async function deleteMedicine(id) {
+  if (!await confirmAction("Xóa thuốc này khỏi lịch?", "Thuốc sẽ không còn hiện trong lịch uống thuốc.")) return;
+  try { await api.deleteMedication(id); await refreshMedications(); closeDialog($("#medicine-dialog")); toast("Đã xóa thuốc."); }
+  catch (error) { toast(error.message, "error"); }
 }
 
 async function refreshMedicalRecords() {
@@ -1011,6 +1115,7 @@ async function analyzeMedicalDocument() {
     state.pendingMedical = result; state.pendingScan = scan;
     $("#document-analysis-preview").innerHTML = analysisMarkup(result.analysis) + '<p class="privacy-result">' + esc(result.privacy_note) + "</p>";
     $("#document-apply").innerHTML = applyMarkup(result.analysis);
+    syncApplyMedicines();
     $("#upload-stage").classList.add("hidden");
     $("#review-stage").classList.remove("hidden");
   } catch (error) { errorAt("#document-error", error.message); }
@@ -1022,12 +1127,15 @@ async function saveMedicalRecord() {
   // Unticked readings are not sent, so their fields must not block saving.
   const applyVitals = $("#apply-vitals")?.checked;
   $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !applyVitals; });
+  syncApplyMedicines();
   if (!$("#document-apply").reportValidity()) return;
   // Checked before anything is saved, so a reading the server would refuse cannot leave the document half applied.
   const vitals = applyVitals ? documentVitals() : null;
   const problem = vitals ? vitalsProblem(vitals, true) : "";
-  errorAt("#record-save-error", problem);
-  if (problem) return;
+  // Every medicine going into the schedule needs a time of day or an explicit "Khi cần".
+  const untimed = [...$$("[data-apply-medicine]")].some(card => card.querySelector("[data-med-on]").checked && !card.querySelector("[data-med-slot]:checked, [data-med-needed]:checked"));
+  errorAt("#record-save-error", problem || (untimed ? "Hãy chọn buổi uống cho từng thuốc, hoặc chọn Khi cần." : ""));
+  if (problem || untimed) return;
   state.busy = true;
   const button = $("#save-medical-record");
   const original = button.innerHTML;
@@ -1100,7 +1208,7 @@ function renderDevice() {
     const [severity, text] = statusOf(m.key, v);
     return "<div><span>" + m.label + "</span><strong>" + withUnit(valueOf(m.key, v), m.unit) + '</strong> <span class="tag ' + severity + '">' + text + "</span></div>";
   }).join("");
-  if (!hasData && state.deviceSource) $("#device-message").textContent = "Đang chờ chỉ số từ máy đo. Chỉ số cũ hơn 30 giây sẽ không được lưu.";
+  if (!hasData && state.deviceSource) $("#device-message").textContent = "Đang chờ chỉ số từ máy đo.";
 }
 function ingest(detail, epoch) {
   if (epoch !== state.deviceEpoch || !state.user) return;
@@ -1149,7 +1257,7 @@ function startSimulation() {
   simulator.addEventListener("data", event => ingest(event.detail, epoch));
   simulator.start();
   $("#device-name").textContent = "Dữ liệu mẫu";
-  $("#device-message").textContent = "Chỉ số được tạo tự động để dùng thử, không phải số đo thật.";
+  $("#device-message").textContent = "Số liệu mẫu, không phải số đo thật.";
   $("#disconnect-device").classList.remove("hidden");
   freshnessTimer = setInterval(renderDevice, 3000);
 }
@@ -1209,14 +1317,14 @@ function clearAccount() {
   setAvatar(null);
   if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
   state.scanUrl = null; $("#scan-image").removeAttribute("src"); $("#scan-save").removeAttribute("href");
-  state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.editing = false; state.rating = 0;
+  state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.medications = []; state.recordsTab = null; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#genetics-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
   $("#onboarding-form").reset(); $("#measurement-form").reset(); $("#feedback-form").reset();
   $("#toast-region").innerHTML = "";
 }
 async function confirmSignOut() {
-  const body = state.user.is_demo ? "Đây là tài khoản dùng thử. Sau khi đăng xuất, bạn sẽ không mở lại được tài khoản này và dữ liệu trong đó."
+  const body = state.user.is_demo ? "Tài khoản dùng thử sẽ mất sau khi đăng xuất."
     : "Bạn cần đăng nhập lại để xem hồ sơ và ghi chỉ số.";
   if (await confirmAction("Đăng xuất?", body, "Đăng xuất")) signOut();
 }
@@ -1249,7 +1357,7 @@ async function enterAccount(user) {
   } else {
     personalize(); screen("app");
     loadAvatar();
-    await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshCare(), refreshRisk()]);
+    await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshMedications(), refreshCare(), refreshRisk()]);
     navigate(location.hash.slice(1) || "dashboard");
   }
 }
@@ -1337,6 +1445,12 @@ function bindEvents() {
     if (deleteRecord) deleteMedicalRecord(deleteRecord.dataset.deleteRecord);
     const scan = event.target.closest("[data-view-scan]");
     if (scan) viewScan(scan.dataset.viewScan);
+    const tab = event.target.closest("[data-records-tab]");
+    if (tab) { state.recordsTab = tab.dataset.recordsTab; renderRecordsTab(); }
+    if (event.target.closest("[data-open-medicines]")) { state.recordsTab = "medicines"; navigate("records"); }
+    const editMedicine = event.target.closest("[data-edit-medicine]");
+    if (editMedicine) openMedicine(editMedicine.dataset.editMedicine);
+
     if (event.target.closest("[data-open-upload]")) openMedicalUpload();
     const viewTarget = event.target.closest("[data-view-patient]");
     if (viewTarget) viewPatient(viewTarget.dataset.viewPatient);
@@ -1356,6 +1470,13 @@ function bindEvents() {
   $("#delete-assessment").addEventListener("click", event => deleteAssessment(event.currentTarget.dataset.id));
   $("#new-measurement").addEventListener("click", () => openMeasurement());
   $("#upload-record").addEventListener("click", openMedicalUpload);
+  $("#add-medicine").addEventListener("click", () => openMedicine());
+  $("#medicine-form").addEventListener("submit", saveMedicine);
+  $("#medicine-form").addEventListener("change", event => {
+    const form = event.currentTarget;
+    if (event.target.type === "checkbox") keepSlotChoice(event.target, SLOTS.map(([key]) => form.elements[key]), form.elements.as_needed);
+  });
+  $("#medicine-delete").addEventListener("click", () => deleteMedicine(state.editingMedicine));
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
   $("#document-ai-consent").addEventListener("change", updateDocumentButton);
   $("#analyze-document").addEventListener("click", analyzeMedicalDocument);
@@ -1365,6 +1486,9 @@ function bindEvents() {
   $("#document-apply").addEventListener("submit", event => event.preventDefault());
   $("#document-apply").addEventListener("change", event => {
     if (event.target.id === "apply-vitals") $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !event.target.checked; });
+    if (event.target.matches("[data-med-on]")) syncApplyMedicines();
+    const card = event.target.closest("[data-apply-medicine]");
+    if (card && event.target.matches("[data-med-slot], [data-med-needed]")) keepSlotChoice(event.target, [...card.querySelectorAll("[data-med-slot]")], card.querySelector("[data-med-needed]"));
   });
   $("#medical-upload-dialog").addEventListener("close", resetMedicalUpload);
   $$("[data-measure-mode]").forEach(button => button.addEventListener("click", () => setMeasureMode(button.dataset.measureMode)));

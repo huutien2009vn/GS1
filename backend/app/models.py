@@ -113,3 +113,24 @@ class CareLink(Base):
     patient_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     caregiver_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Medication(Base):
+    """One medicine on the user's schedule. It gets here only after the user typed it or checked it after a scan."""
+
+    __tablename__ = "medications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    name: Mapped[str] = mapped_column(String(160))
+    strength: Mapped[str] = mapped_column(String(60), default="")
+    amount: Mapped[str] = mapped_column(String(60), default="")
+    morning: Mapped[bool] = mapped_column(Boolean, default=False)
+    noon: Mapped[bool] = mapped_column(Boolean, default=False)
+    afternoon: Mapped[bool] = mapped_column(Boolean, default=False)
+    evening: Mapped[bool] = mapped_column(Boolean, default=False)
+    meal: Mapped[str] = mapped_column(String(10), default="any")
+    start_date: Mapped[str] = mapped_column(String(10))
+    days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str] = mapped_column(String(200), default="")
