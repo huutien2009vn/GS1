@@ -415,6 +415,62 @@ def test_document_analysis_survives_answers_outside_the_limits():
     assert _document_date("31/02/2026") is None and _document_date("không rõ") is None and _document_date(None) is None
 
 
+def test_medication_schedule_is_validated_and_account_scoped(client):
+    pill = {"name": " Paracetamol ", "strength": "500 mg", "amount": "1 viên", "morning": True, "evening": True,
+            "meal": "after", "start_date": "2026-10-02", "days": 5}
+    assert client.get("/api/medications").status_code == 401
+    login(client)
+    assert client.get("/api/medications").json() == []
+    assert client.post("/api/medications", json=pill | {"name": "  "}).status_code == 422
+    assert client.post("/api/medications", json=pill | {"meal": "unknown"}).status_code == 422
+    assert client.post("/api/medications", json=pill | {"days": 0}).status_code == 422
+    saved = client.post("/api/medications", json=pill)
+    assert saved.status_code == 201 and saved.json()["name"] == "Paracetamol" and saved.json()["noon"] is False
+    medication_id = saved.json()["id"]
+    # No slot and no end date is allowed: a medicine taken when needed, for as long as the user keeps it.
+    changed = client.put("/api/medications/" + medication_id, json={"name": "Paracetamol", "start_date": "2026-10-02"})
+    assert changed.status_code == 200 and changed.json()["days"] is None and changed.json()["morning"] is False
+    assert [row["id"] for row in client.get("/api/medications").json()] == [medication_id]
+    owner = client.cookies.get(auth.COOKIE_NAME)
+    client.cookies.clear()
+    login(client)
+    assert client.get("/api/medications").json() == []
+    assert client.put("/api/medications/" + medication_id, json=pill).status_code == 404
+    assert client.delete("/api/medications/" + medication_id).status_code == 404
+    client.cookies.clear()
+    client.cookies.set(auth.COOKIE_NAME, owner)
+    assert client.delete("/api/medications/" + medication_id).status_code == 204
+    assert client.get("/api/medications").json() == []
+
+
+def test_medicine_times_come_only_from_wording_the_code_can_trust():
+    from backend.app.services.ai_service import _medical_analysis_from_json, medication_slots
+    import json
+
+    def slots(text):
+        return "".join(letter if on else "-" for letter, on in zip("SMCT", medication_slots(text).values()))
+
+    assert slots("1-0-1") == "S--T" and slots("0 - 0 - 1") == "---T" and slots("1-1-1-1") == "SMCT" and slots("½-0-½") == "S--T"
+    assert slots("Sáng 1 viên, tối 1 viên") == "S--T" and slots("uống trưa và chiều") == "-MC-"
+    # Not a dose pattern: dates, "1 x 2", "ngày 2 lần" and English leave every box empty for the user.
+    assert slots("01-10-2026") == "----" and slots("1 x 2") == "----" and slots("ngày 2 lần") == "----"
+    assert slots("once a day, before dinner") == "----" and slots("") == "----"
+    answer = {
+        "document_type": "prescription", "document_date": "02/10/2026", "provider": "", "title": "Đơn thuốc", "summary": "Đơn thuốc.",
+        "metrics": [], "conditions": [], "recommendations": [], "warnings": [], "confidence": "medium", "review_required": True,
+        "source": "ai", "disclaimer": "Đối chiếu bản gốc.", "vitals": {}, "own_conditions": [], "family_conditions": [],
+        "medications": [
+            {"name": "Rosuvastatin", "dose": "1 viên", "frequency": "0-0-1", "strength": "5 mg", "meal": "after", "days": 30.0, "unsure": True,
+             "morning": True},
+            {"name": "Lanol ER", "dose": "Unknown", "frequency": "4 to 6 hrly if >100F", "strength": "không rõ", "meal": "sometimes", "days": 9999, "unsure": "yes"},
+        ],
+    }
+    first, second = _medical_analysis_from_json(json.dumps(answer)).medications
+    assert (first.morning, first.evening, first.days, first.meal, first.unsure) == (False, True, 30, "after", True)
+    assert (second.morning, second.noon, second.afternoon, second.evening) == (False, False, False, False)
+    assert (second.days, second.meal, second.unsure, second.dose, second.strength) == (0, "unknown", False, "", "")
+
+
 def test_medical_document_validation(client):
     login(client)
     client.put("/api/profile", json=PROFILE)

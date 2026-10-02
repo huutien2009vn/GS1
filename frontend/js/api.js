@@ -49,5 +49,8 @@ export const api = {
   analyzeMedicalRecord: body => request("/api/medical-records/analyze", { method: "POST", body, timeout: 65000 }),
   saveMedicalRecord: body => request("/api/medical-records", { method: "POST", body: JSON.stringify(body) }),
   medicalRecords: () => request("/api/medical-records"),
+  medications: () => request("/api/medications"),
+  saveMedication: (body, id) => request("/api/medications" + (id ? "/" + encodeURIComponent(id) : ""), { method: id ? "PUT" : "POST", body: JSON.stringify(body) }),
+  deleteMedication: id => request(`/api/medications/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deleteMedicalRecord: id => request(`/api/medical-records/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };

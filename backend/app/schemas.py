@@ -195,7 +195,46 @@ class MedicalMedication(BaseModel):
 
     name: str = Field(min_length=1, max_length=160)
     dose: str = Field(default="", max_length=120)
+    # How to take it, copied word for word from the prescription. The slots below are worked out from it in code.
     frequency: str = Field(default="", max_length=160)
+    strength: str = Field(default="", max_length=60)
+    meal: Literal["before", "after", "any", "unknown"] = "unknown"
+    days: int = Field(default=0, ge=0, le=365)
+    unsure: bool = False
+    morning: bool = False
+    noon: bool = False
+    afternoon: bool = False
+    evening: bool = False
+
+
+class MedicationInput(BaseModel):
+    """A medicine as the user confirmed it. No slot ticked means "taken when needed"."""
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=160)
+    strength: str = Field(default="", max_length=60)
+    amount: str = Field(default="", max_length=60)
+    morning: bool = False
+    noon: bool = False
+    afternoon: bool = False
+    evening: bool = False
+    meal: Literal["before", "after", "any"] = "any"
+    start_date: date
+    days: int | None = Field(default=None, ge=1, le=365)
+    note: str = Field(default="", max_length=200)
+
+    @model_validator(mode="after")
+    def named(self):
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("Vui lòng nhập tên thuốc.")
+        return self
+
+
+class MedicationResult(MedicationInput):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
 
 
 class DocumentVitals(BaseModel):

@@ -48,7 +48,7 @@ const isReal = record => (record.vitals?.source || "manual") !== "simulation";
 const DOCUMENT_TYPES = { lab_result: "Kết quả xét nghiệm", prescription: "Đơn thuốc", discharge_note: "Giấy ra viện", imaging_report: "Kết quả chẩn đoán hình ảnh", vaccination: "Tiêm chủng", other: "Tài liệu sức khỏe" };
 const FLAG_NAMES = { normal: "Trong khoảng tham chiếu", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
 const state = { viewing: null, own: null, care: { patients: [], caregivers: [] }, user: null, health: null, records: [], result: null, risk: null, step: 0, editing: false, rating: 0,
-  medicalRecords: [], pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
+  medicalRecords: [], medications: [], recordsTab: null, editingMedicine: null, pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
   deviceSource: null, deviceValues: {}, deviceTimes: {}, samples: [], deviceEpoch: 0, authEpoch: 0, busy: false, view: "dashboard" };
 let ble = null;
 let simulator = null;
@@ -206,11 +206,11 @@ function navigate(view) {
     if (button.dataset.nav === state.view) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  document.title = { dashboard: "Hôm nay", records: "Giấy tờ sức khỏe", history: "Lịch sử đo", genetics: "Di truyền", profile: "Hồ sơ" }[state.view] + " - GeneSense";
+  document.title = { dashboard: "Hôm nay", records: "Giấy tờ và thuốc", history: "Lịch sử đo", genetics: "Di truyền", profile: "Hồ sơ" }[state.view] + " - GeneSense";
   window.history.replaceState(null, "", "#" + state.view);
   if (state.view === "profile") renderProfile();
   if (state.view === "genetics") renderGenetics();
-  if (state.view === "records") renderMedicalRecords();
+  if (state.view === "records") { renderMedicalRecords(); renderRecordsTab(); }
   if (state.view === "history") { renderHistory(); renderTips(); renderTrends(); }
   window.scrollTo(0, 0);
 }
@@ -421,6 +421,7 @@ function renderDashboard() {
   renderScores();
   renderMetrics();
   renderTips();
+  renderMedicineLink();
 }
 // Charts show what the readings table shows: whole numbers, except SpO₂ which keeps one decimal.
 const chartValue = (key, value) => key === "spo2" ? value : Math.round(value);
@@ -891,14 +892,126 @@ function applyMarkup(analysis) {
   const name = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const own = (analysis.own_conditions || []).filter(key => !state.health.profile.known_conditions.includes(key));
   const family = (analysis.family_conditions || []).filter(item => !state.health.family_history.find(row => row.member_id === item.member)?.conditions.includes(item.condition));
-  if (!found.length && !own.length && !family.length) return '<p class="note">Không thấy chỉ số huyết áp, nhịp tim, đường huyết, bệnh đã chẩn đoán hay tiền sử gia đình mới để đưa vào hồ sơ. Nội dung giấy tờ vẫn được lưu.</p>';
+  const medicines = analysis.medications || [];
+  if (!found.length && !own.length && !family.length && !medicines.length) return '<p class="note">Không thấy chỉ số huyết áp, nhịp tim, đường huyết, thuốc, bệnh đã chẩn đoán hay tiền sử gia đình mới để đưa vào hồ sơ. Nội dung giấy tờ vẫn được lưu.</p>';
   const check = (attribute, label) => '<label class="check-label"><input type="checkbox" ' + attribute + ' checked><span>' + label + "</span></label>";
   return '<h3>Đưa vào hồ sơ</h3><p class="note">Bỏ chọn mục bạn không muốn đưa vào. Sửa lại số nếu AI đọc sai.</p>' +
     (found.length ? '<fieldset class="apply-group"><legend>Chỉ số đo</legend>' + check('id="apply-vitals"', "Thêm vào Lịch sử đo với nguồn “Từ giấy tờ”<small>Số liệu trên giấy tờ là số liệu cũ, không thay đổi tình trạng ở trang Hôm nay.</small>") +
       '<div class="field-grid">' + found.map(([key, label, min, max]) => "<label>" + label + '<input type="number" inputmode="decimal" step=".1" min="' + min + '" max="' + max + '" data-apply-vital="' + key + '" value="' + esc(vitals[key] == null ? "" : Math.round(vitals[key] * 10) / 10) + '"></label>').join("") +
       '<label>Ngày ghi trên giấy tờ<input type="date" id="apply-date" required min="1950-01-01" max="' + new Date().toLocaleDateString("sv") + '" value="' + esc(analysis.document_date || "") + '"></label></div></fieldset>' : "") +
     (own.length ? '<fieldset class="apply-group"><legend>Bệnh đã được chẩn đoán</legend>' + own.map(key => check('data-apply-own="' + esc(key) + '"', esc(name(key)))).join("") + "</fieldset>" : "") +
-    (family.length ? '<fieldset class="apply-group"><legend>Tiền sử gia đình</legend>' + family.map(item => check('data-apply-family="' + esc(item.member + "|" + item.condition) + '"', esc(MEMBERS.find(m => m.id === item.member).label + ": " + name(item.condition)))).join("") + "</fieldset>" : "");
+    (family.length ? '<fieldset class="apply-group"><legend>Tiền sử gia đình</legend>' + family.map(item => check('data-apply-family="' + esc(item.member + "|" + item.condition) + '"', esc(MEMBERS.find(m => m.id === item.member).label + ": " + name(item.condition)))).join("") + "</fieldset>" : "") +
+    (medicines.length ? '<fieldset class="apply-group"><legend>Thuốc trong đơn</legend><p class="note">Kiểm tra từng thuốc với đơn giấy. Chọn buổi uống nếu ô còn trống.</p>' + medicines.map(applyMedicineMarkup).join("") + "</fieldset>" : "");
+}
+// One card per medicine read from a prescription. A name the AI was not sure of starts unticked, so it cannot be saved unseen.
+function applyMedicineMarkup(m) {
+  const field = (label, key, value, extra = "") => "<label" + (key === "name" ? ' class="full"' : "") + ">" + label + '<input data-med="' + key + '" value="' + esc(value) + '" autocomplete="off" ' + extra + "></label>";
+  return '<div class="apply-medicine" data-apply-medicine>' +
+    '<label class="check-label"><input type="checkbox" data-med-on' + (m.unsure ? "" : " checked") + "><span>Thêm vào lịch uống thuốc</span></label>" +
+    (m.unsure ? '<p class="inline-message warning">Chữ viết không rõ. Hãy so với đơn giấy, sửa cho đúng rồi mới chọn thêm.</p>' : "") +
+    '<div class="field-grid">' + field("Tên thuốc", "name", m.name, 'required maxlength="160"') + field("Hàm lượng", "strength", m.strength, 'maxlength="60"') + field("Mỗi lần uống", "amount", m.dose, 'maxlength="60"') + "</div>" +
+    (m.frequency ? '<p class="note">Trên đơn ghi: ' + esc(m.frequency) + "</p>" : "") +
+    '<div class="chips" role="group" aria-label="Buổi uống">' + SLOTS.map(([key, label]) => '<label><input type="checkbox" data-med-slot="' + key + '"' + (m[key] ? " checked" : "") + ">" + label + "</label>").join("") + "</div>" +
+    '<div class="field-grid"><label>So với bữa ăn<select data-med="meal">' + [["any", "Không ghi"], ["before", "Trước ăn"], ["after", "Sau ăn"]].map(([value, label]) => '<option value="' + value + '"' + (m.meal === value ? " selected" : "") + ">" + label + "</option>").join("") + "</select></label>" +
+    field("Số ngày uống", "days", m.days || "", 'type="number" inputmode="numeric" min="1" max="365" step="1"') + "</div></div>";
+}
+// Unticked medicines are not saved, so their fields must not block the form.
+function syncApplyMedicines() {
+  $$("[data-apply-medicine]").forEach(card => {
+    const on = card.querySelector("[data-med-on]").checked;
+    card.querySelectorAll("[data-med], [data-med-slot]").forEach(el => { el.disabled = !on; });
+  });
+}
+
+const SLOTS = [["morning", "Sáng"], ["noon", "Trưa"], ["afternoon", "Chiều"], ["evening", "Tối"]];
+const MEALS = { before: "trước ăn", after: "sau ăn" };
+const localDay = (value = new Date()) => value.toLocaleDateString("sv");
+function medicineEnd(m) {
+  if (!m.days) return null;
+  const end = new Date(m.start_date + "T00:00:00");
+  end.setDate(end.getDate() + m.days - 1);
+  return localDay(end);
+}
+const medicineActive = (m, day = localDay()) => m.start_date <= day && (!m.days || medicineEnd(m) >= day);
+const medicineHow = m => [m.amount, MEALS[m.meal]].filter(Boolean).join(", ");
+function renderMedicineLink() {
+  const count = state.viewing ? 0 : state.medications.filter(m => medicineActive(m)).length;
+  const link = $("#today-medicines");
+  // The emergency panel stays the only call to action while it shows.
+  link.classList.toggle("hidden", !count || (state.result && isEmergency(state.result)));
+  link.textContent = "Thuốc hôm nay: " + count + " loại. Xem lịch uống thuốc";
+}
+function renderRecordsTab() {
+  const tab = state.recordsTab || (state.medications.length ? "medicines" : "documents");
+  $$("[data-records-tab]").forEach(button => {
+    button.classList.toggle("active", button.dataset.recordsTab === tab);
+    button.setAttribute("aria-pressed", String(button.dataset.recordsTab === tab));
+  });
+  $("#medicines-panel").classList.toggle("hidden", tab !== "medicines");
+  $("#documents-panel").classList.toggle("hidden", tab !== "documents");
+  renderMedicines();
+}
+function renderMedicines() {
+  const active = state.medications.filter(m => medicineActive(m));
+  const item = m => "<li><strong>" + esc(m.name + (m.strength ? " " + m.strength : "")) + "</strong>" + (medicineHow(m) ? "<span>" + esc(medicineHow(m)) + "</span>" : "") + (m.note ? '<span class="note">' + esc(m.note) + "</span>" : "") + "</li>";
+  const block = (title, rows) => rows.length ? '<article class="panel slot"><h3>' + title + "</h3><ul>" + rows.map(item).join("") + "</ul></article>" : "";
+  const blocks = SLOTS.map(([key, label]) => block(label, active.filter(m => m[key]))).join("") + block("Khi cần", active.filter(m => !SLOTS.some(([key]) => m[key])));
+  $("#medicine-today").innerHTML = '<section class="section" aria-labelledby="medicine-today-title"><div class="section-heading"><h2 id="medicine-today-title">Thuốc hôm nay</h2></div>' +
+    (blocks ? '<div class="slot-grid">' + blocks + '</div><p class="note">Lịch này chép từ đơn thuốc bạn đã kiểm tra. Nếu có khác biệt, hãy làm theo đơn giấy và lời bác sĩ.</p>'
+      : '<article class="panel empty-state"><h3>Hôm nay không có thuốc trong lịch</h3><p class="note">Chụp đơn thuốc bằng nút Thêm ảnh giấy tờ, hoặc bấm Thêm thuốc để tự nhập.</p></article>') + "</section>";
+  const day = localDay();
+  const course = m => "Từ " + date(m.start_date + "T12:00:00", false) + (m.days ? ", " + m.days + " ngày" : ", uống lâu dài");
+  const state_ = m => m.start_date > day ? '<span class="tag">Chưa bắt đầu</span>' : medicineActive(m, day) ? "" : '<span class="tag">Đã hết đợt</span>';
+  $("#medicine-list").innerHTML = state.medications.length ? '<ul class="panel medicine-rows">' + state.medications.map(m =>
+    "<li><div><strong>" + esc(m.name + (m.strength ? " " + m.strength : "")) + "</strong><span>" + esc([SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần", medicineHow(m)].filter(Boolean).join(" · ")) + '</span><span class="note">' + esc(course(m)) + " " + state_(m) + "</span></div>" +
+    '<div class="record-actions"><button class="link-button" data-edit-medicine="' + esc(m.id) + '">Sửa</button><button class="delete-record" data-delete-medicine="' + esc(m.id) + '">Xóa</button></div></li>').join("") + "</ul>"
+    : '<p class="note">Chưa có thuốc nào.</p>';
+  renderMedicineLink();
+}
+async function refreshMedications() {
+  const epoch = state.authEpoch;
+  try {
+    const rows = await api.medications();
+    if (epoch !== state.authEpoch) return;
+    state.medications = rows;
+  } catch (error) { if (epoch !== state.authEpoch) return; toast(error.message, "error"); }
+  renderMedicines();
+}
+function openMedicine(id) {
+  if (state.viewing) return;
+  const m = state.medications.find(item => item.id === id), form = $("#medicine-form");
+  state.editingMedicine = m ? m.id : null;
+  form.reset();
+  errorAt("#medicine-error");
+  $("#medicine-title").textContent = m ? "Sửa thuốc" : "Thêm thuốc";
+  form.elements.start_date.value = m ? m.start_date : localDay();
+  if (m) {
+    ["name", "strength", "amount", "meal", "note"].forEach(key => { form.elements[key].value = m[key]; });
+    form.elements.days.value = m.days || "";
+    SLOTS.forEach(([key]) => { form.elements[key].checked = m[key]; });
+  }
+  $("#medicine-dialog").showModal();
+}
+async function saveMedicine(event) {
+  event.preventDefault();
+  const form = $("#medicine-form");
+  if (state.busy || !form.reportValidity()) return;
+  state.busy = true;
+  const data = new FormData(form);
+  const body = { name: data.get("name"), strength: data.get("strength").trim(), amount: data.get("amount").trim(), meal: data.get("meal"), start_date: data.get("start_date"),
+    days: data.get("days") ? Number(data.get("days")) : null, note: data.get("note").trim(), ...Object.fromEntries(SLOTS.map(([key]) => [key, form.elements[key].checked])) };
+  try {
+    await api.saveMedication(body, state.editingMedicine);
+    await refreshMedications();
+    closeDialog($("#medicine-dialog"));
+    toast("Đã lưu thuốc.");
+  } catch (error) { errorAt("#medicine-error", error.message); }
+  finally { state.busy = false; }
+}
+async function deleteMedicine(id) {
+  if (!await confirmAction("Xóa thuốc này khỏi lịch?", "Thuốc sẽ không còn hiện trong lịch uống thuốc.")) return;
+  try { await api.deleteMedication(id); await refreshMedications(); toast("Đã xóa thuốc."); }
+  catch (error) { toast(error.message, "error"); }
 }
 const documentVitals = () => Object.fromEntries([...$("#document-apply").querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
 // Runs after the document itself is saved. Profile changes repeat safely; the reading is last, so a retry cannot add it twice.
@@ -919,6 +1032,17 @@ async function applyDocument(vitals) {
     state.health = data.health; state.user = data.user;
     await refreshRisk();
   }
+  // Each saved medicine is marked, so pressing save again after a failure does not add it twice.
+  const day = localDay(), printed = state.pendingMedical.analysis.document_date;
+  for (const card of form.querySelectorAll("[data-apply-medicine]:not([data-saved])")) {
+    if (!card.querySelector("[data-med-on]").checked) continue;
+    const value = key => card.querySelector('[data-med="' + key + '"]').value.trim();
+    await api.saveMedication({ name: value("name"), strength: value("strength"), amount: value("amount"), meal: value("meal"), days: value("days") ? Number(value("days")) : null,
+      start_date: printed && printed <= day ? printed : day, ...Object.fromEntries(SLOTS.map(([key]) => [key, card.querySelector('[data-med-slot="' + key + '"]').checked])) });
+    card.dataset.saved = "true";
+    state.recordsTab = "medicines";
+  }
+  if (form.querySelector("[data-saved]")) await refreshMedications();
   if (vitals) {
     await api.assess({ vitals, source: "document", measured_on: $("#apply-date").value });
     await refreshRecords();
@@ -1011,6 +1135,7 @@ async function analyzeMedicalDocument() {
     state.pendingMedical = result; state.pendingScan = scan;
     $("#document-analysis-preview").innerHTML = analysisMarkup(result.analysis) + '<p class="privacy-result">' + esc(result.privacy_note) + "</p>";
     $("#document-apply").innerHTML = applyMarkup(result.analysis);
+    syncApplyMedicines();
     $("#upload-stage").classList.add("hidden");
     $("#review-stage").classList.remove("hidden");
   } catch (error) { errorAt("#document-error", error.message); }
@@ -1022,6 +1147,7 @@ async function saveMedicalRecord() {
   // Unticked readings are not sent, so their fields must not block saving.
   const applyVitals = $("#apply-vitals")?.checked;
   $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !applyVitals; });
+  syncApplyMedicines();
   if (!$("#document-apply").reportValidity()) return;
   // Checked before anything is saved, so a reading the server would refuse cannot leave the document half applied.
   const vitals = applyVitals ? documentVitals() : null;
@@ -1209,7 +1335,7 @@ function clearAccount() {
   setAvatar(null);
   if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
   state.scanUrl = null; $("#scan-image").removeAttribute("src"); $("#scan-save").removeAttribute("href");
-  state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.editing = false; state.rating = 0;
+  state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.medications = []; state.recordsTab = null; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#genetics-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
   $("#onboarding-form").reset(); $("#measurement-form").reset(); $("#feedback-form").reset();
@@ -1249,7 +1375,7 @@ async function enterAccount(user) {
   } else {
     personalize(); screen("app");
     loadAvatar();
-    await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshCare(), refreshRisk()]);
+    await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshMedications(), refreshCare(), refreshRisk()]);
     navigate(location.hash.slice(1) || "dashboard");
   }
 }
@@ -1337,6 +1463,13 @@ function bindEvents() {
     if (deleteRecord) deleteMedicalRecord(deleteRecord.dataset.deleteRecord);
     const scan = event.target.closest("[data-view-scan]");
     if (scan) viewScan(scan.dataset.viewScan);
+    const tab = event.target.closest("[data-records-tab]");
+    if (tab) { state.recordsTab = tab.dataset.recordsTab; renderRecordsTab(); }
+    if (event.target.closest("[data-open-medicines]")) { state.recordsTab = "medicines"; navigate("records"); }
+    const editMedicine = event.target.closest("[data-edit-medicine]");
+    if (editMedicine) openMedicine(editMedicine.dataset.editMedicine);
+    const dropMedicine = event.target.closest("[data-delete-medicine]");
+    if (dropMedicine) deleteMedicine(dropMedicine.dataset.deleteMedicine);
     if (event.target.closest("[data-open-upload]")) openMedicalUpload();
     const viewTarget = event.target.closest("[data-view-patient]");
     if (viewTarget) viewPatient(viewTarget.dataset.viewPatient);
@@ -1356,6 +1489,8 @@ function bindEvents() {
   $("#delete-assessment").addEventListener("click", event => deleteAssessment(event.currentTarget.dataset.id));
   $("#new-measurement").addEventListener("click", () => openMeasurement());
   $("#upload-record").addEventListener("click", openMedicalUpload);
+  $("#add-medicine").addEventListener("click", () => openMedicine());
+  $("#medicine-form").addEventListener("submit", saveMedicine);
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
   $("#document-ai-consent").addEventListener("change", updateDocumentButton);
   $("#analyze-document").addEventListener("click", analyzeMedicalDocument);
@@ -1365,6 +1500,7 @@ function bindEvents() {
   $("#document-apply").addEventListener("submit", event => event.preventDefault());
   $("#document-apply").addEventListener("change", event => {
     if (event.target.id === "apply-vitals") $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !event.target.checked; });
+    if (event.target.matches("[data-med-on]")) syncApplyMedicines();
   });
   $("#medical-upload-dialog").addEventListener("close", resetMedicalUpload);
   $$("[data-measure-mode]").forEach(button => button.addEventListener("click", () => setMeasureMode(button.dataset.measureMode)));

@@ -113,8 +113,12 @@ MEDICAL_DOCUMENT_SCHEMA = {
                     "name": {"type": "string", "minLength": 1, "maxLength": 160},
                     "dose": {"type": "string", "maxLength": 120},
                     "frequency": {"type": "string", "maxLength": 160},
+                    "strength": {"type": "string", "maxLength": 60},
+                    "meal": {"type": "string", "enum": ["before", "after", "any", "unknown"]},
+                    "days": {"type": "number"},
+                    "unsure": {"type": "boolean"},
                 },
-                "required": ["name", "dose", "frequency"],
+                "required": ["name", "dose", "frequency", "strength", "meal", "days", "unsure"],
             },
         },
         "recommendations": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 300}},
@@ -178,6 +182,29 @@ def _document_date(value: Any) -> str | None:
     return None
 
 
+_DOSE = r"(?:\d(?:[.,]\d)?|½|1/2)"
+_DOSE_PATTERN = re.compile(rf"(?<![\d/.,-])({_DOSE})\s*[-–—]\s*({_DOSE})\s*[-–—]\s*({_DOSE})(?:\s*[-–—]\s*({_DOSE}))?(?![\d/.,-])")
+_SLOT_WORDS = {"morning": "sáng", "noon": "trưa", "afternoon": "chiều", "evening": "tối"}
+
+
+def medication_slots(text: str) -> dict[str, bool]:
+    """Times of day from the prescription's own wording. Only two forms are trusted: "1-0-1" (morning, noon,
+    evening; four numbers add the afternoon) and the words sáng, trưa, chiều, tối. Anything else gives no slot,
+    so the user ticks the boxes: the model guessed these wrong on handwritten samples."""
+    slots = dict.fromkeys(_SLOT_WORDS, False)
+    lowered = str(text or "").lower()
+    found = _DOSE_PATTERN.search(lowered)
+    if found:
+        parts = [part for part in found.groups() if part is not None]
+        names = ("morning", "noon", "evening") if len(parts) == 3 else ("morning", "noon", "afternoon", "evening")
+        for name, part in zip(names, parts):
+            slots[name] = part.replace(",", ".") not in {"0", "0.0"}
+        return slots
+    for name, word in _SLOT_WORDS.items():
+        slots[name] = word in lowered
+    return slots
+
+
 def _clamp(value: Any, schema: dict[str, Any]) -> Any:
     """Cut the answer to the schema's limits. Gemini is never told them (see _gemini_schema), and one long
     sentence or an extra key should not throw away a whole scan."""
@@ -199,6 +226,16 @@ def _medical_analysis_from_json(output: str) -> MedicalDocumentAnalysis:
                        and str(item.get("name") or "").strip() and str(item.get("value") or "").strip()]
     data["medications"] = [item for item in data.get("medications") or [] if isinstance(item, dict)
                            and str(item.get("name") or "").strip()]
+    for item in data["medications"]:
+        # The model writes "unknown" into text it could not find; an empty field is what the form expects.
+        for key in ("dose", "frequency", "strength"):
+            if str(item.get(key) or "").strip().lower() in {"unknown", "n/a", "none", "null", "không rõ", "không ghi"}:
+                item[key] = ""
+        days = item.get("days")
+        item["days"] = int(days) if isinstance(days, (int, float)) and 1 <= days <= 365 else 0
+        item["meal"] = item.get("meal") if item.get("meal") in {"before", "after", "any"} else "unknown"
+        item["unsure"] = item.get("unsure") is True
+        item.update(medication_slots(f"{item.get('frequency') or ''} {item.get('dose') or ''}"))
     if not str(data.get("title") or "").strip():
         data["title"] = "Tài liệu sức khỏe cần xem lại"
         data["review_required"] = True
@@ -241,6 +278,7 @@ class AIInsightService:
         schema: dict[str, Any],
         image_bytes: bytes | None = None,
         mime_type: str | None = None,
+        fast_first: bool = False,
     ) -> str:
         if not self.settings.google_ai_api_key:
             raise RuntimeError("Google AI is not configured")
@@ -266,6 +304,8 @@ class AIInsightService:
             self.settings.google_ai_model.strip(),
             self.settings.google_ai_fallback_model.strip(),
         ])))
+        if fast_first:
+            models.reverse()
         response: httpx.Response | None = None
         last_status: int | None = None
         async with httpx.AsyncClient(timeout=45.0) as client:
@@ -379,7 +419,13 @@ class AIInsightService:
             "ghi mmol/L thì nhân 18); chỉ số không có trên giấy thì để trống, không lấy từ khoảng tham chiếu. "
             "own_conditions: chỉ ghi bệnh mà giấy nêu rõ là chẩn đoán của người bệnh. family_conditions: chỉ ghi khi giấy "
             "nêu rõ tiền sử gia đình kèm người thân cụ thể (bố, mẹ, anh chị em ruột, ông bà nội, ông bà ngoại); không suy "
-            "ra từ họ tên hay từ bệnh của người bệnh."
+            "ra từ họ tên hay từ bệnh của người bệnh. "
+            "medications: với mỗi thuốc trên đơn, name là tên thuốc, strength là hàm lượng (ví dụ 500 mg), dose là số "
+            "lượng mỗi lần đúng như ghi (ví dụ 1 viên), frequency chép NGUYÊN VĂN cách dùng trên đơn (ví dụ '1-0-1', "
+            "'sáng 1 viên, tối 1 viên', 'ngày 2 lần'), không tự đổi thành buổi uống. meal là before hoặc after khi đơn "
+            "ghi trước hoặc sau ăn, không ghi thì unknown. days là số ngày dùng, không ghi thì 0. Thông tin nào đơn "
+            "không ghi thì để chuỗi rỗng, không viết chữ unknown. Không đoán tên thuốc: "
+            "nếu chữ viết tên thuốc hoặc liều không rõ, chép cách đọc gần nhất và đặt unsure=true."
         )
         try:
             if self.provider == "google":
@@ -389,6 +435,9 @@ class AIInsightService:
                     schema=MEDICAL_DOCUMENT_SCHEMA,
                     image_bytes=image_bytes,
                     mime_type=mime_type,
+                    # Reading a photo with the main model took 23 to 84 s on handwritten samples, longer than the
+                    # app waits; the lighter model answered in 3 to 10 s and read the same names.
+                    fast_first=True,
                 )
                 return _medical_analysis_from_json(output)
             if self.openai_client:
