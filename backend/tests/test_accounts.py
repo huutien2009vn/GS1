@@ -455,6 +455,7 @@ def test_medicine_times_come_only_from_wording_the_code_can_trust():
     # Not a dose pattern: dates, "1 x 2", "ngày 2 lần" and English leave every box empty for the user.
     assert slots("01-10-2026") == "----" and slots("1 x 2") == "----" and slots("ngày 2 lần") == "----"
     assert slots("once a day, before dinner") == "----" and slots("") == "----"
+    assert slots("ngày 3 lần, tối đa 4 viên") == "----" and slots("uống tối, tối đa 2 viên, tránh ánh sáng") == "---T"
     answer = {
         "document_type": "prescription", "document_date": "02/10/2026", "provider": "", "title": "Đơn thuốc", "summary": "Đơn thuốc.",
         "metrics": [], "conditions": [], "recommendations": [], "warnings": [], "confidence": "medium", "review_required": True,
