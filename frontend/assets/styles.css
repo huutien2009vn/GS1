@@ -281,6 +281,8 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .history-table .source { display: block; font-size: .889rem; color: var(--ink-2); }
 .empty-state { padding: 8px 0; }
 .empty-state h3 { margin-bottom: 4px; }
+.panel.empty-state { padding: 24px; }
+.panel.empty-state > :last-child { margin-bottom: 0; }
 .advice { margin-bottom: 16px; }
 .tip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .tip-card { display: grid; grid-template-columns: 136px 1fr; gap: 16px; align-items: start; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -318,13 +320,18 @@ ul.medicine-rows { padding: 0 24px; margin-bottom: 24px; }
 .slot li strong, .slot li span, .medicine-rows strong, .medicine-rows div > span { display: block; }
 .medicine-rows li { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .medicine-rows li:last-child { border-bottom: 0; }
-.medicine-rows .record-actions { margin: 0; }
+.medicine-rows .btn { min-height: 44px; min-width: 72px; padding: 6px 18px; }
+.medicine-all { margin-bottom: 24px; }
+.slot h3 .tag { margin-left: 8px; vertical-align: middle; }
+/* The save button stays in view however long the form above it is. */
+.sticky-actions { position: sticky; bottom: 0; margin-top: 16px; padding: 12px 0; background: #fff; border-top: 1px solid var(--line); }
+.sticky-actions .delete-record { margin-right: auto; }
 .slot-group { margin: 16px 0; }
 .slot-group legend { padding: 0; margin-bottom: 8px; font-weight: 600; }
 .slot-group .note { margin: 8px 0 0; }
 .apply-medicine { padding: 16px 0; border-top: 1px solid var(--line); }
 .apply-medicine .chips { margin: 12px 0; }
-.today-medicines { margin: -8px 0 24px; text-align: left; }
+.today-medicines { margin: 12px 0 0; text-align: left; }
 .today-medicines:not(.hidden) { animation: view-in .22s var(--ease-out); }
 /* What a scanned document adds to the profile; every item can be unticked or corrected before saving. */
 .document-apply { margin: 16px 0; padding-top: 16px; border-top: 1px solid var(--line); animation: view-in .22s var(--ease-out); }
@@ -543,6 +550,7 @@ body.viewing .own-only { display: none !important; }
   .status-panel { padding: 24px 16px; }
   .status-panel .btn.primary { width: 100%; }
   .reading-list, .care-list, ul.medicine-rows { padding: 0 16px; }
+  .panel.empty-state { padding: 20px 16px; }
   .field-grid, .trend-grid, .facts-2col, .tip-grid, .risk-grid, .slot-grid { grid-template-columns: 1fr; }
   .risk-key li { grid-template-columns: 1fr auto; }
   /* The status tag does not wrap, so on a phone it takes its own line under the name and the value. */

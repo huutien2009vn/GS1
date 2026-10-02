@@ -89,7 +89,7 @@
         <button data-nav="dashboard" class="active">Hôm nay</button>
         <button data-nav="history">Lịch sử đo</button>
         <button data-nav="genetics">Di truyền</button>
-        <button data-nav="records" class="own-only">Giấy tờ</button>
+        <button data-nav="records" class="own-only">Thuốc và giấy tờ</button>
         <button data-nav="profile">Hồ sơ</button>
       </div></nav>
     </header>
@@ -116,6 +116,7 @@
           <p id="recent-emergency" class="inline-message warning hidden"></p>
           <div id="result-alerts" class="result-alerts" aria-live="polite"></div>
           <button class="btn primary own-only" id="new-measurement">Ghi chỉ số</button>
+          <button id="today-medicines" class="link-button today-medicines own-only hidden" data-open-medicines></button>
           <details id="score-details" class="score-details hidden"><summary>Cách tính kết quả</summary>
             <p>Điểm sàng lọc: <strong id="risk-score">-</strong> trên 100. Điểm càng thấp càng tốt.</p>
             <dl class="score-list"><div><dt>Tiền sử gia đình</dt><dd id="pgrs-score">-</dd></div><div><dt>Thể trạng</dt><dd id="brs-score">-</dd></div><div><dt>Chỉ số đo</dt><dd id="vital-score">-</dd></div></dl>
@@ -124,7 +125,6 @@
             <button class="link-button" data-nav="genetics">Xem nguy cơ theo từng bệnh</button>
           </details>
         </article>
-        <button id="today-medicines" class="link-button today-medicines own-only hidden" data-open-medicines></button>
 
         <section class="section" aria-labelledby="latest-title">
           <div class="section-heading"><h2 id="latest-title">Chỉ số gần nhất</h2></div>
@@ -166,14 +166,14 @@
       </section>
 
       <section id="records-view" class="view hidden">
-        <div class="page-heading"><div><h1>Giấy tờ sức khỏe</h1><p class="lead">Kết quả xét nghiệm, đơn thuốc, giấy khám.</p></div><button class="btn primary" id="upload-record">Thêm ảnh giấy tờ</button></div>
+        <div class="page-heading"><div><h1>Thuốc và giấy tờ</h1><p class="lead">Kết quả xét nghiệm, đơn thuốc, giấy khám.</p></div><button class="btn primary" id="upload-record">Thêm ảnh giấy tờ</button></div>
         <div class="measurement-tabs" role="group" aria-label="Nội dung trang"><button data-records-tab="medicines">Lịch uống thuốc</button><button data-records-tab="documents">Giấy tờ đã lưu</button></div>
         <div id="medicines-panel" class="records-panel hidden">
-          <div id="medicine-today"></div>
-          <section class="section" aria-labelledby="medicine-list-title">
-            <div class="section-heading"><h2 id="medicine-list-title">Tất cả thuốc</h2><button class="btn outline" id="add-medicine">Thêm thuốc</button></div>
-            <div id="medicine-list"></div>
+          <section class="section" aria-labelledby="medicine-today-title">
+            <div class="section-heading"><h2 id="medicine-today-title">Thuốc hôm nay</h2><button class="btn outline" id="add-medicine">Thêm thuốc</button></div>
+            <div id="medicine-today"></div>
           </section>
+          <details id="medicine-all" class="record-details medicine-all hidden"><summary id="medicine-list-title">Tất cả thuốc</summary><p class="note">Bấm Sửa để đổi hoặc xóa một thuốc. Danh sách gồm cả thuốc đã hết đợt.</p><div id="medicine-list"></div></details>
         </div>
         <div id="documents-panel" class="records-panel">
           <p id="records-ai-off" class="note hidden">Tính năng đọc ảnh giấy tờ sẽ có trong bản chính thức.</p>
@@ -204,11 +204,12 @@
   <dialog id="avatar-dialog"><div class="dialog-heading"><h2>Chọn vùng ảnh</h2><button class="icon-button" data-close="avatar-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><p>Kéo ảnh để chọn phần nằm trong vòng tròn.</p><div class="crop-box"><canvas id="avatar-canvas" width="280" height="280" tabindex="0" aria-label="Vùng ảnh. Dùng phím mũi tên để di chuyển ảnh."></canvas></div><label for="avatar-zoom">Phóng to</label><input type="range" id="avatar-zoom" min="1" max="3" step="0.01" value="1"><div class="dialog-actions"><button type="button" class="btn outline" data-close="avatar-dialog">Hủy</button><button type="button" id="avatar-save" class="btn primary">Lưu ảnh</button></div></dialog>
   <dialog id="scan-dialog"><div class="dialog-heading"><h2>Ảnh giấy tờ gốc</h2><button class="icon-button" data-close="scan-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><p class="note">Ảnh chỉ lưu trên thiết bị này. Đổi thiết bị hoặc xóa dữ liệu trình duyệt sẽ làm mất ảnh.</p><img id="scan-image" class="scan-image" alt="Ảnh giấy tờ gốc"><div class="dialog-actions"><a id="scan-save" class="btn outline" download>Lưu ảnh</a><button type="button" class="btn primary" data-close="scan-dialog">Đóng</button></div></dialog>
   <dialog id="result-dialog"><div class="dialog-heading"><h2>Chi tiết lần đo</h2><button class="icon-button" data-close="result-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div><div id="result-detail"></div><div class="record-actions own-only"><button id="delete-assessment" class="delete-record">Xóa lần đo này</button></div></dialog>
-  <dialog id="medicine-dialog"><div class="dialog-heading"><h2 id="medicine-title">Thêm thuốc</h2><button class="icon-button" data-close="medicine-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
-    <form id="medicine-form"><div class="field-grid"><label class="full">Tên thuốc<input name="name" required maxlength="160" autocomplete="off"></label><label>Hàm lượng (ví dụ 500 mg)<input name="strength" maxlength="60" autocomplete="off"></label><label>Mỗi lần uống (ví dụ 1 viên)<input name="amount" maxlength="60" autocomplete="off"></label></div>
-      <fieldset class="slot-group"><legend>Uống vào buổi nào</legend><div class="chips"><label><input type="checkbox" name="morning">Sáng</label><label><input type="checkbox" name="noon">Trưa</label><label><input type="checkbox" name="afternoon">Chiều</label><label><input type="checkbox" name="evening">Tối</label></div><p class="note">Để trống cả bốn buổi nếu chỉ uống khi cần.</p></fieldset>
-      <div class="field-grid"><label>So với bữa ăn<select name="meal"><option value="any">Không ghi</option><option value="before">Trước ăn</option><option value="after">Sau ăn</option></select></label><label>Ngày bắt đầu<input name="start_date" type="date" required min="1950-01-01"></label><label>Số ngày uống (để trống nếu uống lâu dài)<input name="days" type="number" inputmode="numeric" min="1" max="365" step="1"></label><label>Ghi chú<input name="note" maxlength="200" autocomplete="off"></label></div>
-      <p id="medicine-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions"><button type="button" class="btn outline" data-close="medicine-dialog">Hủy</button><button class="btn primary" type="submit">Lưu thuốc</button></div></form>
+  <dialog id="medicine-dialog" aria-labelledby="medicine-title"><div class="dialog-heading"><h2 id="medicine-title">Thêm thuốc</h2><button type="button" class="icon-button" data-close="medicine-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
+    <form id="medicine-form"><div class="field-grid"><label class="full">Tên thuốc<input name="name" required maxlength="160" autocomplete="off" autofocus></label><label>Hàm lượng (ví dụ 500 mg)<input name="strength" maxlength="60" autocomplete="off"></label><label>Mỗi lần uống (ví dụ 1 viên)<input name="amount" maxlength="60" autocomplete="off"></label></div>
+      <fieldset class="slot-group"><legend>Uống vào buổi nào</legend><div class="chips"><label><input type="checkbox" name="morning">Sáng</label><label><input type="checkbox" name="noon">Trưa</label><label><input type="checkbox" name="afternoon">Chiều</label><label><input type="checkbox" name="evening">Tối</label><label><input type="checkbox" name="as_needed">Khi cần</label></div></fieldset>
+      <label>Uống trước hay sau ăn<select name="meal"><option value="any">Không ghi trên đơn</option><option value="before">Trước ăn</option><option value="after">Sau ăn</option></select></label>
+      <details id="medicine-more" class="record-details"><summary>Thêm chi tiết</summary><div class="field-grid"><label>Ngày bắt đầu<input name="start_date" type="date" required min="1950-01-01"></label><label>Số ngày uống (để trống nếu uống lâu dài)<input name="days" type="number" inputmode="numeric" min="1" max="365" step="1"></label><label class="full">Ghi chú<input name="note" maxlength="200" autocomplete="off"></label></div></details>
+      <p id="medicine-error" class="inline-message error hidden" role="alert"></p><div class="dialog-actions sticky-actions"><button type="button" id="medicine-delete" class="delete-record hidden">Xóa thuốc này</button><button type="button" class="btn outline" data-close="medicine-dialog">Hủy</button><button class="btn primary" type="submit">Lưu thuốc</button></div></form>
   </dialog>
   <dialog id="medical-upload-dialog" class="medical-upload-dialog"><div class="dialog-heading"><h2>Thêm ảnh giấy tờ</h2><button class="icon-button" data-close="medical-upload-dialog" aria-label="Đóng"><span data-icon="close"></span></button></div>
     <div id="upload-stage"><p class="note">Chụp rõ toàn bộ giấy tờ, tránh bị lóa.</p><label class="document-drop" for="medical-document-file"><input id="medical-document-file" type="file" accept="image/jpeg,image/png,image/webp"><strong>Chọn ảnh</strong><small>JPG, PNG hoặc WebP, tối đa 8 MB</small><img id="document-preview" class="hidden" alt="Ảnh giấy tờ đã chọn"></label>

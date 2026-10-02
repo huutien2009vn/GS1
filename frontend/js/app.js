@@ -206,7 +206,7 @@ function navigate(view) {
     if (button.dataset.nav === state.view) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  document.title = { dashboard: "Hôm nay", records: "Giấy tờ và thuốc", history: "Lịch sử đo", genetics: "Di truyền", profile: "Hồ sơ" }[state.view] + " - GeneSense";
+  document.title = { dashboard: "Hôm nay", records: "Thuốc và giấy tờ", history: "Lịch sử đo", genetics: "Di truyền", profile: "Hồ sơ" }[state.view] + " - GeneSense";
   window.history.replaceState(null, "", "#" + state.view);
   if (state.view === "profile") renderProfile();
   if (state.view === "genetics") renderGenetics();
@@ -911,15 +911,15 @@ function applyMedicineMarkup(m) {
     (m.unsure ? '<p class="inline-message warning">Chữ viết không rõ. Hãy so với đơn giấy, sửa cho đúng rồi mới chọn thêm.</p>' : "") +
     '<div class="field-grid">' + field("Tên thuốc", "name", m.name, 'required maxlength="160"') + field("Hàm lượng", "strength", m.strength, 'maxlength="60"') + field("Mỗi lần uống", "amount", m.dose, 'maxlength="60"') + "</div>" +
     (m.frequency ? '<p class="note">Trên đơn ghi: ' + esc(m.frequency) + "</p>" : "") +
-    '<div class="chips" role="group" aria-label="Buổi uống">' + SLOTS.map(([key, label]) => '<label><input type="checkbox" data-med-slot="' + key + '"' + (m[key] ? " checked" : "") + ">" + label + "</label>").join("") + "</div>" +
-    '<div class="field-grid"><label>So với bữa ăn<select data-med="meal">' + [["any", "Không ghi"], ["before", "Trước ăn"], ["after", "Sau ăn"]].map(([value, label]) => '<option value="' + value + '"' + (m.meal === value ? " selected" : "") + ">" + label + "</option>").join("") + "</select></label>" +
+    '<div class="chips" role="group" aria-label="Buổi uống">' + SLOTS.map(([key, label]) => '<label><input type="checkbox" data-med-slot="' + key + '"' + (m[key] ? " checked" : "") + ">" + label + "</label>").join("") + '<label><input type="checkbox" data-med-needed>Khi cần</label></div>' +
+    '<div class="field-grid"><label>Uống trước hay sau ăn<select data-med="meal">' + [["any", "Không ghi trên đơn"], ["before", "Trước ăn"], ["after", "Sau ăn"]].map(([value, label]) => '<option value="' + value + '"' + (m.meal === value ? " selected" : "") + ">" + label + "</option>").join("") + "</select></label>" +
     field("Số ngày uống", "days", m.days || "", 'type="number" inputmode="numeric" min="1" max="365" step="1"') + "</div></div>";
 }
 // Unticked medicines are not saved, so their fields must not block the form.
 function syncApplyMedicines() {
   $$("[data-apply-medicine]").forEach(card => {
     const on = card.querySelector("[data-med-on]").checked;
-    card.querySelectorAll("[data-med], [data-med-slot]").forEach(el => { el.disabled = !on; });
+    card.querySelectorAll("[data-med], [data-med-slot], [data-med-needed]").forEach(el => { el.disabled = !on; });
   });
 }
 
@@ -939,7 +939,7 @@ function renderMedicineLink() {
   const link = $("#today-medicines");
   // The emergency panel stays the only call to action while it shows.
   link.classList.toggle("hidden", !count || (state.result && isEmergency(state.result)));
-  link.textContent = "Thuốc hôm nay: " + count + " loại. Xem lịch uống thuốc";
+  link.textContent = "Hôm nay có " + count + " loại thuốc. Xem lịch uống thuốc";
 }
 function renderRecordsTab() {
   const tab = state.recordsTab || (state.medications.length ? "medicines" : "documents");
@@ -953,19 +953,22 @@ function renderRecordsTab() {
 }
 function renderMedicines() {
   const active = state.medications.filter(m => medicineActive(m));
-  const item = m => "<li><strong>" + esc(m.name + (m.strength ? " " + m.strength : "")) + "</strong>" + (medicineHow(m) ? "<span>" + esc(medicineHow(m)) + "</span>" : "") + (m.note ? '<span class="note">' + esc(m.note) + "</span>" : "") + "</li>";
-  const block = (title, rows) => rows.length ? '<article class="panel slot"><h3>' + title + "</h3><ul>" + rows.map(item).join("") + "</ul></article>" : "";
-  const blocks = SLOTS.map(([key, label]) => block(label, active.filter(m => m[key]))).join("") + block("Khi cần", active.filter(m => !SLOTS.some(([key]) => m[key])));
-  $("#medicine-today").innerHTML = '<section class="section" aria-labelledby="medicine-today-title"><div class="section-heading"><h2 id="medicine-today-title">Thuốc hôm nay</h2></div>' +
-    (blocks ? '<div class="slot-grid">' + blocks + '</div><p class="note">Lịch này chép từ đơn thuốc bạn đã kiểm tra. Nếu có khác biệt, hãy làm theo đơn giấy và lời bác sĩ.</p>'
-      : '<article class="panel empty-state"><h3>Hôm nay không có thuốc trong lịch</h3><p class="note">Chụp đơn thuốc bằng nút Thêm ảnh giấy tờ, hoặc bấm Thêm thuốc để tự nhập.</p></article>') + "</section>";
+  const hour = new Date().getHours(), now = hour < 11 ? "morning" : hour < 14 ? "noon" : hour < 18 ? "afternoon" : "evening";
+  const title = m => esc(m.name + (m.strength ? " " + m.strength : ""));
+  const item = m => "<li><strong>" + title(m) + "</strong>" + (medicineHow(m) ? "<span>" + esc(medicineHow(m)) + "</span>" : "") + (m.note ? '<span class="note">' + esc(m.note) + "</span>" : "") + "</li>";
+  const block = (label, rows, current) => rows.length ? '<article class="panel slot"><h3>' + label + (current ? ' <span class="tag">Bây giờ</span>' : "") + "</h3><ul>" + rows.map(item).join("") + "</ul></article>" : "";
+  const blocks = SLOTS.map(([key, label]) => block(label, active.filter(m => m[key]), key === now)).join("") + block("Khi cần", active.filter(m => !SLOTS.some(([key]) => m[key])));
+  $("#medicine-today").innerHTML = blocks ? '<div class="slot-grid">' + blocks + '</div><p class="note">Lịch này chép từ đơn thuốc bạn đã kiểm tra. Nếu có khác biệt, hãy làm theo đơn giấy và lời bác sĩ.</p>'
+    : '<article class="panel empty-state"><h3>Hôm nay không có thuốc trong lịch</h3><p class="note">Chụp đơn thuốc bằng nút Thêm ảnh giấy tờ, hoặc bấm Thêm thuốc để tự nhập.</p></article>';
   const day = localDay();
   const course = m => "Từ " + date(m.start_date + "T12:00:00", false) + (m.days ? ", " + m.days + " ngày" : ", uống lâu dài");
-  const state_ = m => m.start_date > day ? '<span class="tag">Chưa bắt đầu</span>' : medicineActive(m, day) ? "" : '<span class="tag">Đã hết đợt</span>';
-  $("#medicine-list").innerHTML = state.medications.length ? '<ul class="panel medicine-rows">' + state.medications.map(m =>
-    "<li><div><strong>" + esc(m.name + (m.strength ? " " + m.strength : "")) + "</strong><span>" + esc([SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần", medicineHow(m)].filter(Boolean).join(" · ")) + '</span><span class="note">' + esc(course(m)) + " " + state_(m) + "</span></div>" +
-    '<div class="record-actions"><button class="link-button" data-edit-medicine="' + esc(m.id) + '">Sửa</button><button class="delete-record" data-delete-medicine="' + esc(m.id) + '">Xóa</button></div></li>').join("") + "</ul>"
-    : '<p class="note">Chưa có thuốc nào.</p>';
+  const tag = m => m.start_date > day ? '<span class="tag">Chưa bắt đầu</span>' : medicineActive(m, day) ? "" : '<span class="tag">Đã hết đợt</span>';
+  const when = m => SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần";
+  $("#medicine-all").classList.toggle("hidden", !state.medications.length);
+  $("#medicine-list-title").textContent = "Tất cả thuốc (" + state.medications.length + ")";
+  $("#medicine-list").innerHTML = '<ul class="panel medicine-rows">' + state.medications.map(m =>
+    "<li><div><strong>" + title(m) + "</strong><span>" + esc(when(m) + (medicineHow(m) ? ": " + medicineHow(m) : "")) + '</span><span class="note">' + esc(course(m)) + " " + tag(m) + "</span></div>" +
+    '<button class="btn outline" data-edit-medicine="' + esc(m.id) + '">Sửa</button></li>').join("") + "</ul>";
   renderMedicineLink();
 }
 async function refreshMedications() {
@@ -984,22 +987,34 @@ function openMedicine(id) {
   form.reset();
   errorAt("#medicine-error");
   $("#medicine-title").textContent = m ? "Sửa thuốc" : "Thêm thuốc";
+  $("#medicine-delete").classList.toggle("hidden", !m);
+  $("#medicine-more").open = Boolean(m && (m.days || m.note));
   form.elements.start_date.value = m ? m.start_date : localDay();
   if (m) {
     ["name", "strength", "amount", "meal", "note"].forEach(key => { form.elements[key].value = m[key]; });
     form.elements.days.value = m.days || "";
     SLOTS.forEach(([key]) => { form.elements[key].checked = m[key]; });
+    form.elements.as_needed.checked = !SLOTS.some(([key]) => m[key]);
   }
   $("#medicine-dialog").showModal();
+}
+// "Khi cần" and the four times of day exclude each other, so "no fixed time" is always a choice the user made.
+function keepSlotChoice(target, slots, needed) {
+  if (target === needed && needed.checked) slots.forEach(box => { box.checked = false; });
+  else if (target.checked) needed.checked = false;
 }
 async function saveMedicine(event) {
   event.preventDefault();
   const form = $("#medicine-form");
-  if (state.busy || !form.reportValidity()) return;
+  if (state.busy) return;
+  if (!form.checkValidity()) $("#medicine-more").open = true; // a field inside closed details cannot show its message
+  if (!form.reportValidity()) return;
+  const slots = Object.fromEntries(SLOTS.map(([key]) => [key, form.elements[key].checked]));
+  if (!form.elements.as_needed.checked && !Object.values(slots).some(Boolean)) { errorAt("#medicine-error", "Hãy chọn buổi uống, hoặc chọn Khi cần."); return; }
   state.busy = true;
   const data = new FormData(form);
   const body = { name: data.get("name"), strength: data.get("strength").trim(), amount: data.get("amount").trim(), meal: data.get("meal"), start_date: data.get("start_date"),
-    days: data.get("days") ? Number(data.get("days")) : null, note: data.get("note").trim(), ...Object.fromEntries(SLOTS.map(([key]) => [key, form.elements[key].checked])) };
+    days: data.get("days") ? Number(data.get("days")) : null, note: data.get("note").trim(), ...slots };
   try {
     await api.saveMedication(body, state.editingMedicine);
     await refreshMedications();
@@ -1010,43 +1025,8 @@ async function saveMedicine(event) {
 }
 async function deleteMedicine(id) {
   if (!await confirmAction("Xóa thuốc này khỏi lịch?", "Thuốc sẽ không còn hiện trong lịch uống thuốc.")) return;
-  try { await api.deleteMedication(id); await refreshMedications(); toast("Đã xóa thuốc."); }
+  try { await api.deleteMedication(id); await refreshMedications(); closeDialog($("#medicine-dialog")); toast("Đã xóa thuốc."); }
   catch (error) { toast(error.message, "error"); }
-}
-const documentVitals = () => Object.fromEntries([...$("#document-apply").querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
-// Runs after the document itself is saved. Profile changes repeat safely; the reading is last, so a retry cannot add it twice.
-async function applyDocument(vitals) {
-  const form = $("#document-apply");
-  const own = [...form.querySelectorAll("[data-apply-own]:checked")].map(el => el.dataset.applyOwn);
-  const family = [...form.querySelectorAll("[data-apply-family]:checked")].map(el => el.dataset.applyFamily.split("|"));
-  if (own.length || family.length) {
-    const health = structuredClone(state.health);
-    health.profile.known_conditions = [...new Set([...health.profile.known_conditions, ...own])];
-    for (const [id, condition] of family) {
-      const member = MEMBERS.find(m => m.id === id);
-      let row = health.family_history.find(item => item.member_id === id);
-      if (!row) health.family_history.push(row = { member_id: id, relation: member.relation, side: member.side, conditions: [] });
-      row.knowledge = "known"; row.conditions = [...new Set([...row.conditions, condition])];
-    }
-    const data = await api.saveProfile(health);
-    state.health = data.health; state.user = data.user;
-    await refreshRisk();
-  }
-  // Each saved medicine is marked, so pressing save again after a failure does not add it twice.
-  const day = localDay(), printed = state.pendingMedical.analysis.document_date;
-  for (const card of form.querySelectorAll("[data-apply-medicine]:not([data-saved])")) {
-    if (!card.querySelector("[data-med-on]").checked) continue;
-    const value = key => card.querySelector('[data-med="' + key + '"]').value.trim();
-    await api.saveMedication({ name: value("name"), strength: value("strength"), amount: value("amount"), meal: value("meal"), days: value("days") ? Number(value("days")) : null,
-      start_date: printed && printed <= day ? printed : day, ...Object.fromEntries(SLOTS.map(([key]) => [key, card.querySelector('[data-med-slot="' + key + '"]').checked])) });
-    card.dataset.saved = "true";
-    state.recordsTab = "medicines";
-  }
-  if (form.querySelector("[data-saved]")) await refreshMedications();
-  if (vitals) {
-    await api.assess({ vitals, source: "document", measured_on: $("#apply-date").value });
-    await refreshRecords();
-  }
 }
 
 async function refreshMedicalRecords() {
@@ -1152,8 +1132,10 @@ async function saveMedicalRecord() {
   // Checked before anything is saved, so a reading the server would refuse cannot leave the document half applied.
   const vitals = applyVitals ? documentVitals() : null;
   const problem = vitals ? vitalsProblem(vitals, true) : "";
-  errorAt("#record-save-error", problem);
-  if (problem) return;
+  // Every medicine going into the schedule needs a time of day or an explicit "Khi cần".
+  const untimed = [...$$("[data-apply-medicine]")].some(card => card.querySelector("[data-med-on]").checked && !card.querySelector("[data-med-slot]:checked, [data-med-needed]:checked"));
+  errorAt("#record-save-error", problem || (untimed ? "Hãy chọn buổi uống cho từng thuốc, hoặc chọn Khi cần." : ""));
+  if (problem || untimed) return;
   state.busy = true;
   const button = $("#save-medical-record");
   const original = button.innerHTML;
@@ -1468,8 +1450,7 @@ function bindEvents() {
     if (event.target.closest("[data-open-medicines]")) { state.recordsTab = "medicines"; navigate("records"); }
     const editMedicine = event.target.closest("[data-edit-medicine]");
     if (editMedicine) openMedicine(editMedicine.dataset.editMedicine);
-    const dropMedicine = event.target.closest("[data-delete-medicine]");
-    if (dropMedicine) deleteMedicine(dropMedicine.dataset.deleteMedicine);
+
     if (event.target.closest("[data-open-upload]")) openMedicalUpload();
     const viewTarget = event.target.closest("[data-view-patient]");
     if (viewTarget) viewPatient(viewTarget.dataset.viewPatient);
@@ -1491,6 +1472,11 @@ function bindEvents() {
   $("#upload-record").addEventListener("click", openMedicalUpload);
   $("#add-medicine").addEventListener("click", () => openMedicine());
   $("#medicine-form").addEventListener("submit", saveMedicine);
+  $("#medicine-form").addEventListener("change", event => {
+    const form = event.currentTarget;
+    if (event.target.type === "checkbox") keepSlotChoice(event.target, SLOTS.map(([key]) => form.elements[key]), form.elements.as_needed);
+  });
+  $("#medicine-delete").addEventListener("click", () => deleteMedicine(state.editingMedicine));
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
   $("#document-ai-consent").addEventListener("change", updateDocumentButton);
   $("#analyze-document").addEventListener("click", analyzeMedicalDocument);
@@ -1501,6 +1487,8 @@ function bindEvents() {
   $("#document-apply").addEventListener("change", event => {
     if (event.target.id === "apply-vitals") $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !event.target.checked; });
     if (event.target.matches("[data-med-on]")) syncApplyMedicines();
+    const card = event.target.closest("[data-apply-medicine]");
+    if (card && event.target.matches("[data-med-slot], [data-med-needed]")) keepSlotChoice(event.target, [...card.querySelectorAll("[data-med-slot]")], card.querySelector("[data-med-needed]"));
   });
   $("#medical-upload-dialog").addEventListener("close", resetMedicalUpload);
   $$("[data-measure-mode]").forEach(button => button.addEventListener("click", () => setMeasureMode(button.dataset.measureMode)));
