@@ -200,6 +200,8 @@ def medication_slots(text: str) -> dict[str, bool]:
         for name, part in zip(names, parts):
             slots[name] = part.replace(",", ".") not in {"0", "0.0"}
         return slots
+    # "tối đa", "tối thiểu" (at most, at least) and "ánh sáng" (light) hold a slot word without naming a time of day.
+    lowered = re.sub(r"tối đa|tối thiểu|ánh sáng", " ", lowered)
     for name, word in _SLOT_WORDS.items():
         slots[name] = word in lowered
     return slots

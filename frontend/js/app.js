@@ -917,7 +917,7 @@ function applyMedicineMarkup(m) {
   return '<div class="apply-medicine" data-apply-medicine>' +
     '<label class="check-label"><input type="checkbox" data-med-on' + (m.unsure ? "" : " checked") + "><span>Thêm vào lịch uống thuốc</span></label>" +
     (m.unsure ? '<p class="inline-message warning">Chữ viết không rõ. Hãy so với đơn giấy, sửa cho đúng rồi mới chọn thêm.</p>' : "") +
-    '<div class="field-grid">' + field("Tên thuốc", "name", m.name, 'required maxlength="160"') + field("Hàm lượng", "strength", m.strength, 'maxlength="60"') + field("Mỗi lần uống", "amount", m.dose, 'maxlength="60"') + "</div>" +
+    '<div class="field-grid">' + field("Tên thuốc", "name", m.name, 'required maxlength="160"') + field("Hàm lượng", "strength", m.strength, 'maxlength="60"') + field("Mỗi lần uống", "amount", (m.dose || "").slice(0, 60), 'maxlength="60"') + "</div>" +
     (m.frequency ? '<p class="note">Trên đơn ghi: ' + esc(m.frequency) + "</p>" : "") +
     '<div class="chips" role="group" aria-label="Buổi uống">' + SLOTS.map(([key, label]) => '<label><input type="checkbox" data-med-slot="' + key + '"' + (m[key] ? " checked" : "") + ">" + label + "</label>").join("") + '<label><input type="checkbox" data-med-needed>Khi cần</label></div>' +
     '<div class="field-grid"><label>Uống trước hay sau ăn<select data-med="meal">' + [["any", "Không ghi trên đơn"], ["before", "Trước ăn"], ["after", "Sau ăn"]].map(([value, label]) => '<option value="' + value + '"' + (m.meal === value ? " selected" : "") + ">" + label + "</option>").join("") + "</select></label>" +
@@ -1015,6 +1015,7 @@ async function saveMedicine(event) {
   event.preventDefault();
   const form = $("#medicine-form");
   if (state.busy) return;
+  errorAt("#medicine-error");
   if (!form.checkValidity()) $("#medicine-more").open = true; // a field inside closed details cannot show its message
   if (!form.reportValidity()) return;
   const slots = Object.fromEntries(SLOTS.map(([key]) => [key, form.elements[key].checked]));
@@ -1325,7 +1326,7 @@ function clearAccount() {
   setAvatar(null);
   if (state.scanUrl) URL.revokeObjectURL(state.scanUrl);
   state.scanUrl = null; $("#scan-image").removeAttribute("src"); $("#scan-save").removeAttribute("href");
-  state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.medications = []; state.recordsTab = null; state.editing = false; state.rating = 0;
+  state.user = null; state.health = null; state.records = []; state.result = null; state.risk = null; state.riskFailed = false; state.medicalRecords = []; state.medications = []; state.recordsTab = null; state.historyAll = false; state.editing = false; state.rating = 0;
   resetMedicalUpload();
   $("#profile-content").innerHTML = ""; $("#genetics-content").innerHTML = ""; $("#history-list").innerHTML = ""; $("#medical-record-list").innerHTML = ""; $("#result-detail").innerHTML = "";
   $("#onboarding-form").reset(); $("#measurement-form").reset(); $("#feedback-form").reset();
