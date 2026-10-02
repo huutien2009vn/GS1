@@ -295,10 +295,9 @@ class AIInsightService:
         if response is None or not response.is_success:
             if last_status in {401, 403}:
                 raise AIServiceError("Khóa Gemini không hợp lệ, đã bị chặn hoặc chưa có quyền dùng Gemini API.")
-            if last_status == 429:
+            if last_status in {429, 500, 502, 503, 504}:
+                # Out of quota or the provider is down: the person scanning can only wait either way.
                 raise AIServiceError("Tính năng đọc ảnh đang quá tải. Hãy thử lại sau ít phút.")
-            if last_status in {500, 502, 503, 504}:
-                raise AIServiceError("Gemini đang quá tải. GeneSense đã thử lại và đổi model dự phòng nhưng chưa thành công.")
             if last_status == 404:
                 raise AIServiceError("Các model Gemini đã cấu hình chưa khả dụng với khóa này.")
             if last_status == 400:

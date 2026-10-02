@@ -21,6 +21,8 @@ def test_used_up_quota_goes_straight_to_the_fallback_model(monkeypatch):
         calls.append(request.url.path.rsplit("/", 1)[-1])
         if "primary" in request.url.path:
             return httpx.Response(429, json={"error": {"status": "RESOURCE_EXHAUSTED"}})
+        if "down" in request.url.path:
+            return httpx.Response(503, json={"error": {"status": "UNAVAILABLE"}})
         return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "{}"}]}, "finishReason": "STOP"}]})
 
     async def no_waiting(_seconds):
@@ -38,6 +40,18 @@ def test_used_up_quota_goes_straight_to_the_fallback_model(monkeypatch):
                                           google_ai_model="primary", google_ai_fallback_model="primary-too"))
     with pytest.raises(ai_service.AIServiceError, match="Tính năng đọc ảnh đang quá tải"):
         asyncio.run(exhausted._gemini_generate(instruction="i", text="t", schema={"type": "object"}))
+
+    # A provider outage is retried, then ends in the same plain message.
+    async def no_delay(_seconds):
+        calls.append("wait")
+
+    monkeypatch.setattr(ai_service.asyncio, "sleep", no_delay)
+    calls.clear()
+    down = AIInsightService(Settings(ai_provider="google", google_ai_api_key="test-key",
+                                     google_ai_model="down", google_ai_fallback_model="down-too"))
+    with pytest.raises(ai_service.AIServiceError, match="Tính năng đọc ảnh đang quá tải"):
+        asyncio.run(down._gemini_generate(instruction="i", text="t", schema={"type": "object"}))
+    assert calls.count("wait") == 4 and len(calls) == 10  # three tries for each of the two models
 
 
 def test_gemini_schema_uses_cross_model_compatible_subset():
