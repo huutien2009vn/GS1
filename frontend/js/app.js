@@ -699,21 +699,28 @@ function renderReport() {
     return "<tr><td>" + m.label + "</td><td>" + esc(text) + "</td></tr>";
   }).join("");
   const notice = "Phiếu do người dùng tự ghi bằng ứng dụng GeneSense. Không phải kết quả khám bệnh, không có giá trị chẩn đoán.";
+  // Medicines being taken now. Not shown while viewing a relative: their medicines are not shared yet, and state.medications holds the viewer's own.
+  const medicines = state.medications.filter(m => medicineActive(m));
+  const medicineRows = medicines.map(m => "<tr><td>" + esc(m.name + (m.strength ? " " + m.strength : "")) + "</td><td>" + esc(medicineWhen(m) + (medicineHow(m) ? ": " + medicineHow(m) : "")) + "</td><td>" + esc(medicineCourse(m)) + "</td></tr>").join("");
+  const numerals = ["I", "II", "III", "IV", "V", "VI"];
+  let part = 0;
+  const heading = text => "<h2>" + numerals[part++] + ". " + text + "</h2>";
   $("#report-sheet").innerHTML =
     '<header class="report-head"><div><strong>GeneSense</strong><br>Ứng dụng theo dõi sức khỏe tại nhà</div><div class="report-meta">Mã phiếu: ' + code + "<br>Ngày lập: " + esc(date(now.toISOString(), false)) + "</div></header>" +
     '<h1 id="report-title">PHIẾU TỔNG HỢP CHỈ SỐ SỨC KHỎE TẠI NHÀ</h1><p class="report-period">Kỳ báo cáo: ' + days + " ngày, đến ngày " + esc(date(now.toISOString(), false)) + '</p><p class="report-notice">' + notice + "</p>" +
     (cut ? '<p class="report-notice">Phiếu chỉ gồm 100 lần đo gần nhất, từ ' + esc(date(oldest.toISOString())) + ". Các lần đo cũ hơn trong kỳ không có trong phiếu.</p>" : "") +
-    "<h2>I. Thông tin người dùng</h2>" +
+    heading("Thông tin người dùng") +
     '<table class="report-table report-info"><tbody><tr><th>Họ tên</th><td>' + esc(h.display_name) + "</td><th>Tuổi</th><td>" + p.age + "</td><th>Giới tính</th><td>" + sex + "</td></tr>" +
     "<tr><th>Chiều cao</th><td>" + num(p.height_cm) + " cm</td><th>Cân nặng</th><td>" + num(p.weight_kg) + " kg</td><th>BMI</th><td>" + num(bmi) + " (" + bmiLabel(bmi) + ")</td></tr>" +
     "<tr><th>Bệnh đã chẩn đoán</th><td colspan=\"5\">" + esc(p.known_conditions.map(conditionName).filter(Boolean).join(", ") || "Không khai báo") + "</td></tr>" +
     "<tr><th>Hút thuốc</th><td>" + (p.smoker ? "Có" : "Không") + "</td><th>Vận động</th><td colspan=\"3\">" + p.activity_minutes_week + " phút mỗi tuần</td></tr></tbody></table>" +
-    "<h2>II. Tiền sử bệnh trong gia đình</h2>" +
+    heading("Tiền sử bệnh trong gia đình") +
     '<table class="report-table"><thead><tr><th>Người thân</th><th>Bệnh đã biết</th></tr></thead><tbody>' + family + "</tbody></table>" +
-    "<h2>III. Tổng hợp trong kỳ</h2>" +
+    (state.viewing ? "" : heading("Thuốc đang dùng") + (medicines.length ? '<table class="report-table"><thead><tr><th>Tên thuốc</th><th>Cách dùng</th><th>Thời gian</th></tr></thead><tbody>' + medicineRows + "</tbody></table>" : "<p>Không ghi thuốc đang dùng.</p>")) +
+    heading("Tổng hợp trong kỳ") +
     (rows.length ? '<table class="report-table report-num"><thead><tr><th>Chỉ số</th><th>Đơn vị</th><th>Số lần đo</th><th>Trung bình</th><th>Thấp nhất</th><th>Cao nhất</th><th>Số lần ngoài ngưỡng</th></tr></thead><tbody>' + reportSummary(rows) + "</tbody></table>" : "<p>Không có số đo trong kỳ này.</p>") +
-    (rows.length ? "<h2>IV. Biểu đồ diễn biến</h2><div class=\"report-charts\">" + Object.keys(TRENDS).map(id => '<figure data-report-chart="' + id + '"><figcaption></figcaption><div class="trend-chart"></div></figure>').join("") + '</div><p class="report-small">Đường liền: tâm thu hoặc chỉ số chính. Đường đứt: tâm trương. Nền xám hoặc đường chấm: ngưỡng tham khảo.</p>' +
-      "<h2>V. Bảng số đo chi tiết</h2>" +
+    (rows.length ? heading("Biểu đồ diễn biến") + "<div class=\"report-charts\">" + Object.keys(TRENDS).map(id => '<figure data-report-chart="' + id + '"><figcaption></figcaption><div class="trend-chart"></div></figure>').join("") + '</div><p class="report-small">Đường liền: tâm thu hoặc chỉ số chính. Đường đứt: tâm trương. Nền xám hoặc đường chấm: ngưỡng tham khảo.</p>' +
+      heading("Bảng số đo chi tiết") +
       '<table class="report-table report-num"><thead><tr><th>Thời gian</th><th>Huyết áp (mmHg)</th><th>Nhịp tim (lần/phút)</th><th>SpO₂ (%)</th><th>Đường huyết (mg/dL)</th><th>Nguồn</th><th>Ghi chú</th></tr></thead><tbody>' +
       rows.slice().reverse().map(row => "<tr><td>" + esc(when(row)) + "</td><td>" + cell("systolic", row.vitals) + "</td><td>" + cell("heart_rate", row.vitals) + "</td><td>" + cell("spo2", row.vitals) + "</td><td>" + cell("glucose", row.vitals) + "</td><td>" + esc(SOURCE_NAMES[row.vitals.source || "manual"]) + "</td><td>" + mark(row.vitals) + "</td></tr>").join("") + "</tbody></table>" : "") +
     '<p class="report-notice report-end">' + notice + " Ngưỡng tham khảo dùng trong phiếu là ngưỡng minh họa của ứng dụng. Hãy mang phiếu này đến bác sĩ để được tư vấn.</p>";
@@ -945,6 +952,8 @@ function medicineEnd(m) {
 }
 const medicineActive = (m, day = localDay()) => m.start_date <= day && (!m.days || medicineEnd(m) >= day);
 const medicineHow = m => [m.amount, MEALS[m.meal]].filter(Boolean).join(", ");
+const medicineWhen = m => SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần";
+const medicineCourse = m => "Từ " + date(m.start_date + "T12:00:00", false) + (m.days ? ", " + m.days + " ngày" : ", uống lâu dài");
 function renderMedicineLink() {
   const count = state.viewing ? 0 : state.medications.filter(m => medicineActive(m)).length;
   const link = $("#today-medicines");
@@ -972,13 +981,11 @@ function renderMedicines() {
   $("#medicine-today").innerHTML = blocks ? '<div class="slot-grid">' + blocks + '</div><p class="note">Nếu khác đơn giấy, hãy làm theo đơn và lời bác sĩ.</p>'
     : '<article class="panel empty-state"><h3>Hôm nay không có thuốc trong lịch</h3><p class="note">Chụp đơn thuốc hoặc bấm Thêm thuốc.</p></article>';
   const day = localDay();
-  const course = m => "Từ " + date(m.start_date + "T12:00:00", false) + (m.days ? ", " + m.days + " ngày" : ", uống lâu dài");
   const tag = m => m.start_date > day ? '<span class="tag">Chưa bắt đầu</span>' : medicineActive(m, day) ? "" : '<span class="tag">Đã hết đợt</span>';
-  const when = m => SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần";
   $("#medicine-all").classList.toggle("hidden", !state.medications.length);
   $("#medicine-list-title").textContent = "Tất cả thuốc (" + state.medications.length + ")";
   $("#medicine-list").innerHTML = '<ul class="panel medicine-rows">' + state.medications.map(m =>
-    "<li><div><strong>" + title(m) + "</strong><span>" + esc(when(m) + (medicineHow(m) ? ": " + medicineHow(m) : "")) + '</span><span class="note">' + esc(course(m)) + " " + tag(m) + "</span></div>" +
+    "<li><div><strong>" + title(m) + "</strong><span>" + esc(medicineWhen(m) + (medicineHow(m) ? ": " + medicineHow(m) : "")) + '</span><span class="note">' + esc(medicineCourse(m)) + " " + tag(m) + "</span></div>" +
     '<button class="btn outline" data-edit-medicine="' + esc(m.id) + '">Sửa</button></li>').join("") + "</ul>";
   renderMedicineLink();
 }
