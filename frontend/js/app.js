@@ -75,11 +75,14 @@ function closeDialog(dialog) {
   dialog.addEventListener("animationend", done, { once: true });
   setTimeout(done, 250);
 }
-function confirmAction(title, body = "Không thể khôi phục sau khi xóa.", okLabel = "Xóa") {
+function confirmAction(title, body = "Không thể khôi phục sau khi xóa.", okLabel = "Xóa", { cancel = "Hủy", danger = true } = {}) {
   const dialog = $("#confirm-dialog");
   $("#confirm-title").textContent = title;
   $("#confirm-body").textContent = body;
   $("#confirm-ok").textContent = okLabel;
+  $("#confirm-ok").className = "btn " + (danger ? "danger" : "primary");
+  $("#confirm-no").textContent = cancel;
+  dialog.returnValue = ""; // Esc closes without a value, so an earlier "yes" must not count again
   dialog.showModal();
   return new Promise(resolve => dialog.addEventListener("close", () => resolve(dialog.returnValue === "yes"), { once: true }));
 }
@@ -1023,7 +1026,7 @@ async function saveMedicine(event) {
   state.busy = true;
   const data = new FormData(form);
   const body = { name: data.get("name"), strength: data.get("strength").trim(), amount: data.get("amount").trim(), meal: data.get("meal"), start_date: data.get("start_date"),
-    days: data.get("days") ? Number(data.get("days")) : null, note: data.get("note").trim(), ...slots };
+    days: data.get("days") ? Number(data.get("days")) : null, note: data.get("note").trim(), as_needed: form.elements.as_needed.checked, ...slots };
   try {
     await api.saveMedication(body, state.editingMedicine);
     await refreshMedications();
@@ -1036,6 +1039,49 @@ async function deleteMedicine(id) {
   if (!await confirmAction("Xóa thuốc này khỏi lịch?", "Thuốc sẽ không còn hiện trong lịch uống thuốc.")) return;
   try { await api.deleteMedication(id); await refreshMedications(); closeDialog($("#medicine-dialog")); toast("Đã xóa thuốc."); }
   catch (error) { toast(error.message, "error"); }
+}
+const documentVitals = () => Object.fromEntries([...$("#document-apply").querySelectorAll("[data-apply-vital]")].filter(el => el.value.trim()).map(el => [el.dataset.applyVital, Number(el.value)]));
+const medicineKey = name => name.trim().toLocaleLowerCase("vi");
+// Ticked medicines from the scan whose name is already in the schedule and not finished, e.g. the same prescription scanned twice.
+function duplicateMedicines() {
+  const day = localDay();
+  const current = new Set(state.medications.filter(m => !m.days || medicineEnd(m) >= day).map(m => medicineKey(m.name)));
+  return [...$$("[data-apply-medicine]:not([data-saved])")].filter(card => card.querySelector("[data-med-on]").checked && current.has(medicineKey(card.querySelector('[data-med="name"]').value)));
+}
+// Runs after the document itself is saved. Profile changes repeat safely; the reading is last, so a retry cannot add it twice.
+async function applyDocument(vitals) {
+  const form = $("#document-apply");
+  const own = [...form.querySelectorAll("[data-apply-own]:checked")].map(el => el.dataset.applyOwn);
+  const family = [...form.querySelectorAll("[data-apply-family]:checked")].map(el => el.dataset.applyFamily.split("|"));
+  if (own.length || family.length) {
+    const health = structuredClone(state.health);
+    health.profile.known_conditions = [...new Set([...health.profile.known_conditions, ...own])];
+    for (const [id, condition] of family) {
+      const member = MEMBERS.find(m => m.id === id);
+      let row = health.family_history.find(item => item.member_id === id);
+      if (!row) health.family_history.push(row = { member_id: id, relation: member.relation, side: member.side, conditions: [] });
+      row.knowledge = "known"; row.conditions = [...new Set([...row.conditions, condition])];
+    }
+    const data = await api.saveProfile(health);
+    state.health = data.health; state.user = data.user;
+    await refreshRisk();
+  }
+  // Each saved medicine is marked, so pressing save again after a failure does not add it twice.
+  const day = localDay(), printed = state.pendingMedical.analysis.document_date;
+  for (const card of form.querySelectorAll("[data-apply-medicine]:not([data-saved])")) {
+    if (!card.querySelector("[data-med-on]").checked) continue;
+    const value = key => card.querySelector('[data-med="' + key + '"]').value.trim();
+    await api.saveMedication({ name: value("name"), strength: value("strength"), amount: value("amount"), meal: value("meal"), days: value("days") ? Number(value("days")) : null,
+      start_date: printed && printed <= day ? printed : day, as_needed: card.querySelector("[data-med-needed]").checked,
+      ...Object.fromEntries(SLOTS.map(([key]) => [key, card.querySelector('[data-med-slot="' + key + '"]').checked])) });
+    card.dataset.saved = "true";
+    state.recordsTab = "medicines";
+  }
+  if (form.querySelector("[data-saved]")) await refreshMedications();
+  if (vitals) {
+    await api.assess({ vitals, source: "document", measured_on: $("#apply-date").value });
+    await refreshRecords();
+  }
 }
 
 async function refreshMedicalRecords() {
@@ -1145,6 +1191,15 @@ async function saveMedicalRecord() {
   const untimed = [...$$("[data-apply-medicine]")].some(card => card.querySelector("[data-med-on]").checked && !card.querySelector("[data-med-slot]:checked, [data-med-needed]:checked"));
   errorAt("#record-save-error", problem || (untimed ? "Hãy chọn buổi uống cho từng thuốc, hoặc chọn Khi cần." : ""));
   if (problem || untimed) return;
+  const twice = duplicateMedicines();
+  if (twice.length) {
+    const names = twice.map(card => card.querySelector('[data-med="name"]').value.trim()).join(", ");
+    // Closing the question with Esc also keeps the schedule free of copies.
+    if (!await confirmAction("Thuốc đã có trong lịch", names + " đã có trong lịch uống thuốc. Thêm lần nữa?", "Vẫn thêm", { cancel: "Không thêm", danger: false })) {
+      twice.forEach(card => { card.querySelector("[data-med-on]").checked = false; });
+      syncApplyMedicines();
+    }
+  }
   state.busy = true;
   const button = $("#save-medical-record");
   const original = button.innerHTML;

@@ -207,8 +207,8 @@ class MedicalMedication(BaseModel):
     evening: bool = False
 
 
-class MedicationInput(BaseModel):
-    """A medicine as the user confirmed it. No slot ticked means "taken when needed"."""
+class MedicationFields(BaseModel):
+    """A medicine as stored. No slot ticked means "taken when needed"."""
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=160)
@@ -223,15 +223,23 @@ class MedicationInput(BaseModel):
     days: int | None = Field(default=None, ge=1, le=365)
     note: str = Field(default="", max_length=200)
 
+
+class MedicationInput(MedicationFields):
+    """A medicine as the user confirmed it. "Khi cần" must be ticked explicitly, so a forgotten time
+    of day is refused instead of being saved as "when needed". The flag is checked, not stored."""
+    as_needed: bool = Field(default=False, exclude=True)
+
     @model_validator(mode="after")
     def named(self):
         self.name = self.name.strip()
         if not self.name:
             raise ValueError("Vui lòng nhập tên thuốc.")
+        if self.as_needed == any((self.morning, self.noon, self.afternoon, self.evening)):
+            raise ValueError("Hãy chọn buổi uống, hoặc chọn Khi cần.")
         return self
 
 
-class MedicationResult(MedicationInput):
+class MedicationResult(MedicationFields):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
