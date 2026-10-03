@@ -426,9 +426,14 @@ def test_medication_schedule_is_validated_and_account_scoped(client):
     assert client.post("/api/medications", json=pill | {"days": 0}).status_code == 422
     saved = client.post("/api/medications", json=pill)
     assert saved.status_code == 201 and saved.json()["name"] == "Paracetamol" and saved.json()["noon"] is False
+    assert "as_needed" not in saved.json()
     medication_id = saved.json()["id"]
+    # "Khi cần" must be chosen on purpose: no time of day without it, and never both.
+    when_needed = {"name": "Paracetamol", "start_date": "2026-10-02"}
+    assert client.put("/api/medications/" + medication_id, json=when_needed).status_code == 422
+    assert client.post("/api/medications", json=pill | {"as_needed": True}).status_code == 422
     # No slot and no end date is allowed: a medicine taken when needed, for as long as the user keeps it.
-    changed = client.put("/api/medications/" + medication_id, json={"name": "Paracetamol", "start_date": "2026-10-02"})
+    changed = client.put("/api/medications/" + medication_id, json=when_needed | {"as_needed": True})
     assert changed.status_code == 200 and changed.json()["days"] is None and changed.json()["morning"] is False
     assert [row["id"] for row in client.get("/api/medications").json()] == [medication_id]
     owner = client.cookies.get(auth.COOKIE_NAME)
