@@ -42,6 +42,30 @@ const TRENDS = {
   glucose: { unit: "mg/dL", band: [70, 180], min: 50, max: 220, series: [["glucose", "Đường huyết", "#0b57a4"]] },
 };
 const trendCharts = {};
+const revealedPanels = new Set();
+const panelRevealObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    panelRevealObserver.unobserve(entry.target);
+    const finish = event => {
+      if (event.target !== entry.target || event.animationName !== "panel-reveal") return;
+      entry.target.classList.remove("reveal-once");
+      entry.target.removeEventListener("animationend", finish);
+      entry.target.removeEventListener("animationcancel", finish);
+    };
+    entry.target.addEventListener("animationend", finish);
+    entry.target.addEventListener("animationcancel", finish);
+    entry.target.classList.remove("reveal-pending");
+    entry.target.classList.add("reveal-once");
+    revealedPanels.add(entry.target.dataset.revealKey);
+  }
+}, { threshold: 0.12, rootMargin: "0px 0px -80px 0px" }) : null;
+function revealPanelOnce(element, key) {
+  if (!panelRevealObserver || revealedPanels.has(key) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  element.dataset.revealKey = key;
+  element.classList.add("reveal-pending");
+  panelRevealObserver.observe(element);
+}
 const isEmergency = result => Boolean(result?.alerts?.some(a => a.severity === "alert"));
 const levelOf = result => isEmergency(result) ? "emergency" : result.risk_level;
 const isReal = record => (record.vitals?.source || "manual") !== "simulation";
@@ -289,14 +313,19 @@ function personalize() {
 function setNavDrawer(open, restoreFocus = true) {
   const drawer = $("#app-nav-drawer"), scrim = $("#nav-scrim"), toggle = $("#sidebar-toggle");
   if (!drawer || !scrim || !toggle) return;
+  document.body.classList.toggle("nav-open", open);
+  [".app-site-header", "#demo-banner", "#viewing-banner", "#sync-status", "#main-content", ".mobile-nav"].forEach(selector => {
+    const background = $(selector);
+    if (background) background.toggleAttribute("inert", open);
+  });
   drawer.classList.toggle("is-open", open);
   scrim.classList.toggle("is-open", open);
   drawer.setAttribute("aria-hidden", String(!open));
   scrim.setAttribute("aria-hidden", String(!open));
-  drawer.inert = !open;
+  drawer.toggleAttribute("inert", !open);
   toggle.setAttribute("aria-expanded", String(open));
   toggle.setAttribute("aria-label", open ? "Đóng bảng điều hướng" : "Mở bảng điều hướng");
-  if (open) drawer.querySelector(`[data-nav="${state.view}"]`)?.focus({ preventScroll: true });
+  if (open) (drawer.querySelector(`[data-nav="${state.view}"]`) || drawer).focus({ preventScroll: true });
   else if (restoreFocus && !$("#app-screen").classList.contains("hidden")) toggle.focus({ preventScroll: true });
 }
 
@@ -434,13 +463,17 @@ function placeRanges(root) {
 }
 function renderMetrics() {
   const values = state.result?.measured_vitals || {};
-  $("#metric-grid").innerHTML = METRICS.map(m => {
+  const grid = $("#metric-grid");
+  grid.querySelectorAll(".reveal-pending").forEach(card => panelRevealObserver?.unobserve(card));
+  grid.innerHTML = METRICS.map(m => {
     const [level, status] = statusOf(m.key, values);
     const measured = values[m.key] != null;
     const flag = measured ? '<span class="reading-flag tag ' + level + '">' + status + '</span>' : '<span class="reading-placeholder">Chưa có số đo được ghi</span>';
     return '<div class="reading"><span class="metric-icon">' + icon(m.icon) + '</span><span class="reading-name">' + m.label + '</span>' + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + '<small>' + m.unit + '</small></span>' + rangeBar(m.key, values[m.key]) : '<span class="reading-value empty">Chưa đo</span>') + flag + '</div>';
   }).join("");
-  placeRanges($("#metric-grid"));
+  placeRanges(grid);
+  // Keep emergency values immediately readable; other cards enter only on their first viewport visit.
+  if (!isEmergency(state.result)) [...grid.children].forEach((card, index) => revealPanelOnce(card, "metric-" + METRICS[index].key));
 }
 // Stock photos (Pexels, self-hosted) chosen by the tip's topic; order matters ("thuốc lá" before generic words).
 const TIP_IMAGES = [
@@ -545,8 +578,10 @@ function renderTrends() {
   // Every source shares one chart: typed-in, Bluetooth and sample readings.
   const rows = state.records.slice(0, 30).reverse();
   $("#chart-context").textContent = source ? "Tối đa 30 lần đo gần nhất" : "";
+  $("#chart-help").classList.toggle("hidden", !rows.length);
   for (const [id, spec] of Object.entries(TRENDS)) {
     const card = $('[data-trend="' + id + '"]');
+    revealPanelOnce(card, "trend-" + id);
     const points = rows.filter(row => spec.series.every(([key]) => row.vitals[key] != null));
     card.querySelector(".trend-empty").classList.toggle("hidden", points.length > 0);
     const host = card.querySelector(".trend-chart");
@@ -1713,9 +1748,26 @@ function bindEvents() {
   $("#nav-close").addEventListener("click", () => setNavDrawer(false));
   $("#nav-scrim").addEventListener("click", () => setNavDrawer(false));
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape" && $("#app-nav-drawer").classList.contains("is-open")) {
+    const drawer = $("#app-nav-drawer");
+    if (!drawer.classList.contains("is-open")) return;
+    if (event.key === "Escape") {
       event.preventDefault();
       setNavDrawer(false);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter(el => el.getAttribute("aria-hidden") !== "true" && el.getClientRects().length > 0);
+    const first = focusable[0], last = focusable.at(-1), active = document.activeElement;
+    if (!first || !last) {
+      event.preventDefault();
+      drawer.focus({ preventScroll: true });
+    } else if (event.shiftKey && (!drawer.contains(active) || active === first)) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && (!drawer.contains(active) || active === last)) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
     }
   });
   $("#google-login").addEventListener("click", () => { location.assign("/api/auth/google"); });
