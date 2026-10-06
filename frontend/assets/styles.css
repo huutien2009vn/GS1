@@ -395,6 +395,15 @@ ul.medicine-rows { padding: 0 24px; margin-bottom: 24px; }
 .facts-2col dd { margin: 0; font-weight: 600; text-align: right; }
 .fact-note { font-weight: 400; color: var(--ink-2); }
 #profile-view h3 { margin-top: 20px; }
+.profile-genetics-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 70px; margin-top: 18px; padding: 12px 14px; border: 1px solid #d7e6f8; border-radius: 16px; background: linear-gradient(135deg, #fbfdff, #eef6ff); color: var(--blue); text-align: left; cursor: pointer; transition: background-color .2s ease-out, border-color .2s ease-out, box-shadow .22s ease-out, transform .22s var(--ease-out); }
+.profile-genetics-link:hover { background: #eef6ff; border-color: #bfd7f5; box-shadow: 0 8px 18px #0756ce16; transform: translateY(-1px); }
+.profile-genetics-icon { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border: 1px solid #cdece2; border-radius: 14px; background: linear-gradient(145deg, #f1fbf7, #ddf4eb); color: #087e73; box-shadow: 0 2px 6px #087e7312; transition: transform .24s var(--ease-out), box-shadow .24s ease-out, filter .24s ease-out; }
+.profile-genetics-icon .icon { width: 24px; height: 24px; }
+.profile-genetics-copy { display: grid; gap: 3px; min-width: 0; }
+.profile-genetics-copy strong { color: var(--ink); font-size: .96rem; }
+.profile-genetics-copy small { color: var(--ink-2); font-size: .84rem; line-height: 1.4; white-space: normal; }
+.profile-genetics-arrow { display: grid; place-items: center; flex: 0 0 22px; margin-left: auto; color: var(--blue); }
+.profile-genetics-arrow .icon { width: 20px; height: 20px; }
 
 /* Family tree: three generations on a 4-column grid; joins draw the parent-child lines. */
 .ft-summary p { margin-bottom: 4px; }
@@ -631,10 +640,12 @@ body.viewing .own-only { display: none !important; }
 @media (hover: hover) and (pointer: fine) {
   .nav-drawer-links [data-nav]:hover .nav-item-icon,
   .service:hover .feature-icon,
+  .profile-genetics-link:hover .profile-genetics-icon,
   .mobile-nav button:hover .icon { transform: perspective(420px) translateY(-3px) rotateX(7deg) scale(1.07); box-shadow: 0 8px 16px #0756ce24; filter: drop-shadow(0 3px 4px #0756ce18); }
 }
 .nav-drawer-links [data-nav]:active .nav-item-icon,
 .service:active .feature-icon,
+.profile-genetics-link:active .profile-genetics-icon,
 .mobile-nav button:active .icon { transform: perspective(420px) translateY(-2px) rotateX(5deg) scale(1.06); filter: drop-shadow(0 3px 4px #0756ce20); }
 
 @media (max-width: 760px) {
@@ -713,5 +724,6 @@ body.viewing .own-only { display: none !important; }
   *, *::backdrop, *::details-content { transition: none !important; animation: none !important; }
   .nav-drawer-links [data-nav]:hover .nav-item-icon, .nav-drawer-links [data-nav].active .nav-item-icon,
   .service:hover .feature-icon, .mobile-nav button:hover .icon, .mobile-nav button.active .icon,
+  .profile-genetics-link:hover .profile-genetics-icon, .profile-genetics-link:active .profile-genetics-icon,
   .nav-drawer-links [data-nav]:active .nav-item-icon, .service:active .feature-icon, .mobile-nav button:active .icon { transform: none !important; filter: none !important; }
 }
