@@ -3,6 +3,7 @@ import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -174,6 +175,66 @@ def test_profile_validation_and_partial_measurements(client):
     assert response.json()["measured_vitals"]["spo2"] is None
     emergency = client.post("/api/assessments", json={"vitals": {"spo2": 85}})
     assert emergency.json()["risk_level"] == "alert"
+
+
+def test_idempotent_manual_sync_and_seven_day_bp_groups(client):
+    login(client)
+    client.put("/api/profile", json=PROFILE)
+    client_id = str(uuid4())
+    body = {"source": "manual", "client_id": client_id,
+            "vitals": {"heart_rate": 72, "timestamp": datetime.now(timezone.utc).isoformat()}}
+    first = client.post("/api/assessments", json=body)
+    retry = client.post("/api/assessments", json=body)
+    assert first.status_code == 201 and retry.status_code == 201
+    assert retry.json()["id"] == first.json()["id"]
+    assert len(client.get("/api/assessments").json()) == 1
+
+    offset = -420  # device local time is UTC+07:00
+    local_tz = timezone(timedelta(minutes=-offset))
+    now = datetime.now(local_tz)
+
+    def past_local(hour):
+        moment = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        return moment - timedelta(days=1) if moment > now else moment
+
+    for hour, systolic, diastolic in ((8, 120, 80), (9, 130, 82), (19, 140, 90)):
+        payload = {"source": "manual", "client_id": str(uuid4()),
+                   "vitals": {"systolic": systolic, "diastolic": diastolic, "timestamp": past_local(hour).isoformat()}}
+        assert client.post("/api/assessments", json=payload).status_code == 201
+
+    summary = client.get(f"/api/assessments/weekly-bp?timezone_offset={offset}").json()
+    assert summary["days"] == 7
+    assert summary["morning"] == {"count": 2, "systolic": 125.0, "diastolic": 81.0}
+    assert summary["evening"] == {"count": 1, "systolic": 140.0, "diastolic": 90.0}
+
+
+def test_medication_intake_is_account_scoped_idempotent_and_deleted_with_medicine(client):
+    login(client)
+    today = datetime.now(timezone.utc).date()
+    medication = client.post("/api/medications", json={
+        "name": "Thuốc thử", "start_date": today.isoformat(), "days": 3, "morning": True,
+    })
+    assert medication.status_code == 201
+    medication_id = medication.json()["id"]
+    url = f"/api/medications/{medication_id}/intakes/morning"
+    payload = {"scheduled_on": today.isoformat(), "taken": True}
+    first = client.put(url, json=payload)
+    retry = client.put(url, json=payload)
+    assert first.status_code == retry.status_code == 200
+    assert first.json()["taken"] is True and retry.json()["taken_at"] == first.json()["taken_at"]
+    assert len(client.get(f"/api/medications/intakes?scheduled_on={today.isoformat()}").json()) == 1
+    assert client.put(f"/api/medications/{medication_id}/intakes/noon", json=payload).status_code == 422
+    outside_course = {"scheduled_on": (today + timedelta(days=3)).isoformat(), "taken": True}
+    assert client.put(url, json=outside_course).status_code == 422
+
+    owner = client.cookies.get(auth.COOKIE_NAME)
+    client.cookies.clear()
+    login(client)
+    assert client.get(f"/api/medications/intakes?scheduled_on={today.isoformat()}").json() == []
+    client.cookies.clear()
+    client.cookies.set(auth.COOKIE_NAME, owner)
+    assert client.delete("/api/medications/" + medication_id).status_code == 204
+    assert client.get(f"/api/medications/intakes?scheduled_on={today.isoformat()}").json() == []
 
 
 def test_demo_and_no_consent_never_call_ai(client, monkeypatch):
@@ -555,6 +616,33 @@ def test_care_link_grants_read_only_access_until_revoked(client):
     assert client.get(base + "/profile").status_code == 404
     assert client.get(base + "/risk").status_code == 404
     assert client.get("/api/risk").json()["scores"]["vitals"] is None  # the caregiver has no reading of their own
+
+
+def test_caregiver_sees_medicines_only_after_explicit_opt_in(client):
+    patient, patient_cookie = _demo_with_profile(client)
+    today = datetime.now(timezone.utc).date().isoformat()
+    medication = client.post("/api/medications", json={
+        "name": "Thuốc riêng", "start_date": today, "morning": True,
+    }).json()
+    code = client.post("/api/care/invites").json()["code"]
+    client.cookies.clear()
+    _, caregiver_cookie = _demo_with_profile(client)
+    base = "/api/care/patients/" + patient["id"]
+    assert client.post("/api/care/links", json={"code": code}).status_code == 201
+    hidden = client.get(f"{base}/medications?scheduled_on={today}").json()
+    assert hidden == {"shared": False, "medications": [], "intakes": []}
+
+    _as(client, patient_cookie)
+    assert client.put("/api/profile", json=PROFILE | {"share_medications": True}).status_code == 200
+    _as(client, caregiver_cookie)
+    shared = client.get(f"{base}/medications?scheduled_on={today}").json()
+    assert shared["shared"] is True and [row["id"] for row in shared["medications"]] == [medication["id"]]
+
+    _as(client, patient_cookie)
+    assert client.put("/api/profile", json=PROFILE | {"share_medications": False}).status_code == 200
+    _as(client, caregiver_cookie)
+    hidden_again = client.get(f"{base}/medications?scheduled_on={today}").json()
+    assert hidden_again == {"shared": False, "medications": [], "intakes": []}
 
 
 def test_care_invite_expiry_replacement_and_rate_limit(client):

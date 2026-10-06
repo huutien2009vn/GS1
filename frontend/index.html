@@ -111,6 +111,7 @@
     </aside>
     <div id="demo-banner" class="demo-banner hidden">Hồ sơ mẫu, không phải dữ liệu thật.</div>
     <div id="viewing-banner" class="viewing-banner hidden"><span id="viewing-text"></span><button id="exit-viewing" class="btn outline">Về hồ sơ của tôi</button></div>
+    <div id="sync-status" class="sync-status hidden" role="status" aria-live="polite"></div>
     <main id="main-content" class="page" tabindex="-1">
       <section id="dashboard-view" class="view">
         <div class="page-heading dashboard-heading"><div><p class="eyebrow">SỨC KHỎE CỦA BẠN</p><h1 id="greeting">Xin chào</h1><p id="today-date" class="lead"></p></div><span class="welcome-symbol" data-icon="sun" aria-hidden="true"></span></div>
@@ -172,9 +173,11 @@
       <section id="history-view" class="view hidden">
         <div class="page-heading"><div><h1>Lịch sử đo</h1><p class="lead">Theo dõi những thay đổi qua từng lần đo.</p></div><div class="heading-actions"><button class="link-button" id="refresh-history">Tải lại</button><button class="btn outline" id="open-report"><span data-icon="report"></span>Lập phiếu tổng hợp</button></div></div>
         <div class="measurement-tabs history-tabs" role="group" aria-label="Cách xem chỉ số"><button class="active" data-history-tab="charts" aria-pressed="true"><span data-icon="chart"></span>Biểu đồ sức khỏe</button><button data-history-tab="readings" aria-pressed="false"><span data-icon="history"></span>Các lần đo</button></div>
+        <section id="pending-readings" class="panel pending-readings hidden" aria-labelledby="pending-readings-title"></section>
         <article id="history-readings-panel" class="panel hidden"><div class="panel-heading"><h2>Các lần đo</h2><label class="inline-select">Hiển thị<select id="history-filter"><option value="all">Tất cả</option><option value="real">Dữ liệu của tôi</option><option value="simulation">Dữ liệu mẫu</option></select></label></div><div id="history-list"></div></article>
         <section id="history-charts-panel" class="section" aria-labelledby="trend-title">
           <div class="section-heading"><h2 id="trend-title">Diễn biến chỉ số</h2><p id="chart-context" class="note"></p></div>
+          <article id="weekly-bp-summary" class="panel weekly-bp-summary" aria-live="polite"></article>
           <div class="trend-grid">
             <article class="panel trend-card" data-trend="bp"><div class="trend-head"><h3>Huyết áp <small>mmHg</small></h3><p class="trend-latest"></p></div><ul class="trend-legend"><li><span class="key-sys"></span>Tâm thu (số trên)</li><li><span class="key-dia"></span>Tâm trương (số dưới)</li><li><span class="key-limit"></span>Ngưỡng cao: 140 và 90</li></ul><div class="trend-chart" tabindex="0" aria-describedby="trend-bp-summary"></div><p class="trend-empty note">Chưa có lần đo huyết áp.</p><p id="trend-bp-summary" class="visually-hidden"></p></article>
             <article class="panel trend-card" data-trend="heart_rate"><div class="trend-head"><h3>Nhịp tim <small>lần/phút</small></h3><p class="trend-latest"></p></div><div class="trend-chart" tabindex="0" aria-describedby="trend-heart_rate-summary"></div><p class="trend-empty note">Chưa có lần đo nhịp tim.</p><p id="trend-heart_rate-summary" class="visually-hidden"></p></article>
@@ -200,7 +203,7 @@
         <div class="measurement-tabs" role="group" aria-label="Nội dung trang"><button data-records-tab="medicines">Lịch uống thuốc</button><button data-records-tab="documents">Giấy tờ đã lưu</button></div>
         <div id="medicines-panel" class="records-panel hidden">
           <section class="section" aria-labelledby="medicine-today-title">
-            <div class="section-heading"><h2 id="medicine-today-title">Thuốc hôm nay</h2><button class="btn outline" id="add-medicine">Thêm thuốc</button></div>
+            <div class="section-heading"><h2 id="medicine-today-title">Thuốc hôm nay</h2><div class="heading-actions"><button class="btn outline" id="medicine-print">In lịch</button><button class="btn outline" id="add-medicine">Thêm thuốc</button></div></div>
             <div id="medicine-today"></div>
           </section>
           <details id="medicine-all" class="record-details medicine-all hidden"><summary id="medicine-list-title">Tất cả thuốc</summary><div id="medicine-list"></div></details>
@@ -252,6 +255,7 @@
     <div class="report-toolbar"><button class="btn outline" id="report-back">Quay lại</button><label class="inline-select">Kỳ báo cáo<select id="report-days"><option value="7">7 ngày</option><option value="30" selected>30 ngày</option><option value="90">90 ngày</option></select></label><button class="btn primary" id="report-print">In / Lưu PDF</button></div>
     <article id="report-sheet" class="report-sheet"></article>
   </section>
+  <section id="medicine-print-screen" class="medicine-print-screen hidden" aria-label="Lịch thuốc để in"><article id="medicine-print-sheet" class="medicine-print-sheet"></article></section>
   <dialog id="confirm-dialog" class="confirm-dialog"><form method="dialog"><h2 id="confirm-title">Xóa?</h2><p id="confirm-body">Không thể khôi phục sau khi xóa.</p><div class="dialog-actions"><button id="confirm-no" class="btn outline" value="no">Hủy</button><button id="confirm-ok" class="btn danger" value="yes">Xóa</button></div></form></dialog>
   <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
   <noscript>Vui lòng bật JavaScript để sử dụng GeneSense.</noscript>
