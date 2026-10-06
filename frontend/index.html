@@ -94,19 +94,24 @@
   </section>
 
   <div id="app-screen" class="app-shell hidden">
-    <header class="site-header"><div class="site-header-inner"><a class="brand" href="#dashboard"><img src="/assets/favicon.svg" width="36" height="36" alt=""><span><strong>GeneSense</strong><small>Theo dõi sức khỏe và sàng lọc bệnh mạn tính</small></span></a>
+    <header class="site-header app-site-header"><div class="site-header-inner"><button class="brand brand-toggle" id="sidebar-toggle" type="button" aria-label="Mở bảng điều hướng" aria-controls="app-nav-drawer" aria-expanded="false"><img src="/assets/favicon.svg" width="36" height="36" alt=""><span><strong>GeneSense</strong><small>Theo dõi sức khỏe và sàng lọc bệnh mạn tính</small></span><span class="brand-menu-indicator" data-icon="menu"></span></button>
       <a class="header-account" id="account-link" href="#profile"><span class="avatar" data-avatar aria-hidden="true"></span><span class="visually-hidden">Hồ sơ của </span><span class="header-name" data-user-name></span></a></div>
-      <nav class="main-nav" aria-label="Điều hướng chính"><div class="main-nav-inner">
-        <button data-nav="dashboard" class="active"><span data-icon="grid"></span>Hôm nay</button>
-        <button data-nav="history"><span data-icon="chart"></span>Lịch sử đo</button>
-        <button data-nav="genetics"><span data-icon="family"></span>Di truyền</button>
-        <button data-nav="records" class="own-only"><span data-icon="document"></span>Thuốc và giấy tờ</button>
-        <button data-nav="profile"><span data-icon="user"></span>Hồ sơ</button>
-      </div></nav>
     </header>
+    <button class="nav-scrim" id="nav-scrim" type="button" aria-label="Đóng bảng điều hướng" aria-hidden="true" tabindex="-1"></button>
+    <aside class="nav-drawer" id="app-nav-drawer" aria-label="Điều hướng chính" aria-hidden="true" inert>
+      <div class="nav-drawer-heading"><div class="nav-drawer-brand"><img src="/assets/favicon.svg" width="36" height="36" alt=""><span><strong>GeneSense</strong><small>Chăm sóc sức khỏe</small></span></div><button class="icon-button nav-close" id="nav-close" type="button" aria-label="Đóng bảng điều hướng"><span data-icon="close"></span></button></div>
+      <nav class="nav-drawer-links" aria-label="Các mục chính">
+        <button data-nav="dashboard" class="active"><span class="nav-item-icon" data-icon="grid"></span><span class="nav-item-label">Hôm nay</span><span class="nav-item-arrow" data-icon="chevron"></span></button>
+        <button data-nav="history"><span class="nav-item-icon" data-icon="chart"></span><span class="nav-item-label">Lịch sử đo</span><span class="nav-item-arrow" data-icon="chevron"></span></button>
+        <button data-nav="genetics"><span class="nav-item-icon" data-icon="family"></span><span class="nav-item-label">Di truyền</span><span class="nav-item-arrow" data-icon="chevron"></span></button>
+        <button data-nav="records" class="own-only"><span class="nav-item-icon" data-icon="document"></span><span class="nav-item-label">Thuốc và giấy tờ</span><span class="nav-item-arrow" data-icon="chevron"></span></button>
+        <button data-nav="profile"><span class="nav-item-icon" data-icon="user"></span><span class="nav-item-label">Hồ sơ</span><span class="nav-item-arrow" data-icon="chevron"></span></button>
+      </nav>
+      <p class="nav-drawer-note">Theo dõi sức khỏe của bạn và gia đình, ở một nơi.</p>
+    </aside>
     <div id="demo-banner" class="demo-banner hidden">Hồ sơ mẫu, không phải dữ liệu thật.</div>
     <div id="viewing-banner" class="viewing-banner hidden"><span id="viewing-text"></span><button id="exit-viewing" class="btn outline">Về hồ sơ của tôi</button></div>
-    <main id="main-content" class="page">
+    <main id="main-content" class="page" tabindex="-1">
       <section id="dashboard-view" class="view">
         <div class="page-heading dashboard-heading"><div><p class="eyebrow">SỨC KHỎE CỦA BẠN</p><h1 id="greeting">Xin chào</h1><p id="today-date" class="lead"></p></div><span class="welcome-symbol" data-icon="sun" aria-hidden="true"></span></div>
         <div id="care-alerts" class="own-only" aria-live="polite"></div>

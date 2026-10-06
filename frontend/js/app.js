@@ -92,6 +92,7 @@ function errorAt(id, text = "") {
   el.classList.toggle("hidden", !text);
 }
 function screen(name) {
+  if (name !== "app") setNavDrawer(false, false);
   ["loading", "login", "onboarding", "app", "report"].forEach(key => $("#" + key + "-screen").classList.toggle("hidden", key !== name));
   if (name !== "app") document.title = "GeneSense - Theo dõi sức khỏe";
   window.scrollTo(0, 0);
@@ -200,6 +201,20 @@ function personalize() {
   const today = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" }).format(new Date());
   $("#today-date").textContent = today.charAt(0).toUpperCase() + today.slice(1);
 }
+function setNavDrawer(open, restoreFocus = true) {
+  const drawer = $("#app-nav-drawer"), scrim = $("#nav-scrim"), toggle = $("#sidebar-toggle");
+  if (!drawer || !scrim || !toggle) return;
+  drawer.classList.toggle("is-open", open);
+  scrim.classList.toggle("is-open", open);
+  drawer.setAttribute("aria-hidden", String(!open));
+  scrim.setAttribute("aria-hidden", String(!open));
+  drawer.inert = !open;
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.setAttribute("aria-label", open ? "Đóng bảng điều hướng" : "Mở bảng điều hướng");
+  if (open) drawer.querySelector(`[data-nav="${state.view}"]`)?.focus({ preventScroll: true });
+  else if (restoreFocus && !$("#app-screen").classList.contains("hidden")) toggle.focus({ preventScroll: true });
+}
+
 function navigate(view) {
   if (!state.user || !state.health) return;
   state.view = ["dashboard", "records", "history", "genetics", "profile"].includes(view) && !(state.viewing && view === "records") ? view : "dashboard";
@@ -1470,6 +1485,15 @@ async function boot() {
 }
 
 function bindEvents() {
+  $("#sidebar-toggle").addEventListener("click", () => setNavDrawer($("#sidebar-toggle").getAttribute("aria-expanded") !== "true"));
+  $("#nav-close").addEventListener("click", () => setNavDrawer(false));
+  $("#nav-scrim").addEventListener("click", () => setNavDrawer(false));
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && $("#app-nav-drawer").classList.contains("is-open")) {
+      event.preventDefault();
+      setNavDrawer(false);
+    }
+  });
   $("#google-login").addEventListener("click", () => { location.assign("/api/auth/google"); });
   $("#demo-login").addEventListener("click", async () => {
     const button = $("#demo-login"); button.disabled = true;
@@ -1519,7 +1543,13 @@ function bindEvents() {
   ["height", "weight"].forEach(id => $("#" + id).addEventListener("input", updateBmi));
   document.addEventListener("click", event => {
     const nav = event.target.closest("[data-nav]");
-    if (nav) navigate(nav.dataset.nav);
+    if (nav) {
+      navigate(nav.dataset.nav);
+      if (nav.closest("#app-nav-drawer")) {
+        setNavDrawer(false, false);
+        $("#main-content").focus({ preventScroll: true });
+      }
+    }
     const close = event.target.closest("[data-close]");
     if (close) closeDialog($("#" + close.dataset.close));
     const record = event.target.closest("[data-record]");
