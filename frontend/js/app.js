@@ -48,7 +48,7 @@ const isReal = record => (record.vitals?.source || "manual") !== "simulation";
 const DOCUMENT_TYPES = { lab_result: "Kết quả xét nghiệm", prescription: "Đơn thuốc", discharge_note: "Giấy ra viện", imaging_report: "Kết quả chẩn đoán hình ảnh", vaccination: "Tiêm chủng", other: "Tài liệu sức khỏe" };
 const FLAG_NAMES = { normal: "Trong khoảng tham chiếu", high: "Cao", low: "Thấp", abnormal: "Cần xem lại", unknown: "Chưa rõ" };
 const state = { viewing: null, own: null, care: { patients: [], caregivers: [] }, user: null, health: null, records: [], result: null, risk: null, step: 0, editing: false, rating: 0,
-  medicalRecords: [], medications: [], recordsTab: null, editingMedicine: null, pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null,
+  medicalRecords: [], medications: [], recordsTab: null, editingMedicine: null, pendingMedical: null, documentAiEnabled: false, aiProvider: "AI", previewUrl: null, uploadFile: null,
   deviceSource: null, deviceValues: {}, deviceTimes: {}, samples: [], deviceEpoch: 0, authEpoch: 0, busy: false, view: "dashboard" };
 let ble = null;
 let simulator = null;
@@ -1135,13 +1135,16 @@ function resetMedicalUpload() {
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.previewUrl = null;
   state.pendingMedical = null; state.pendingScan = null;
+  state.uploadFile = null;
   $("#document-apply").innerHTML = "";
+  $("#medical-camera-file").value = "";
   $("#medical-document-file").value = "";
   $("#document-ai-consent").checked = false;
   $("#confirm-medical-record").checked = false;
   $("#document-preview").removeAttribute("src");
   $("#document-preview").classList.add("hidden");
-  $(".document-drop").classList.remove("has-file");
+  $("#document-drop").classList.remove("has-file");
+  $("#document-photo-status").textContent = "Chưa chọn ảnh";
   $("#upload-stage").classList.remove("hidden");
   $("#review-stage").classList.add("hidden");
   $("#analyze-document").disabled = true;
@@ -1151,8 +1154,7 @@ function resetMedicalUpload() {
 }
 
 function updateDocumentButton() {
-  const file = $("#medical-document-file").files[0];
-  $("#analyze-document").disabled = !state.documentAiEnabled || !file || !$("#document-ai-consent").checked || state.busy;
+  $("#analyze-document").disabled = !state.documentAiEnabled || !state.uploadFile || !$("#document-ai-consent").checked || state.busy;
 }
 
 function openMedicalUpload() {
@@ -1161,37 +1163,41 @@ function openMedicalUpload() {
   $("#medical-upload-dialog").showModal();
 }
 
-function selectMedicalImage() {
-  const file = $("#medical-document-file").files[0];
+function selectMedicalImage(event) {
+  const input = event.currentTarget;
+  const file = input.files[0];
+  if (!file) { updateDocumentButton(); return; }
+  state.uploadFile = file;
+  for (const selector of ["#medical-camera-file", "#medical-document-file"]) if (selector !== "#" + input.id) $(selector).value = "";
   errorAt("#document-error");
   if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
   state.previewUrl = null;
   $("#document-preview").classList.add("hidden");
-  $(".document-drop").classList.remove("has-file");
-  if (!file) { updateDocumentButton(); return; }
+  $("#document-drop").classList.remove("has-file");
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
     errorAt("#document-error", "Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.");
-    $("#medical-document-file").value = "";
+    input.value = ""; state.uploadFile = null;
   } else if (file.size > 8 * 1024 * 1024) {
     errorAt("#document-error", "Ảnh vượt quá giới hạn 8 MB.");
-    $("#medical-document-file").value = "";
+    input.value = ""; state.uploadFile = null;
   } else {
     state.previewUrl = URL.createObjectURL(file);
     $("#document-preview").src = state.previewUrl;
     $("#document-preview").classList.remove("hidden");
-    $(".document-drop").classList.add("has-file");
+    $("#document-drop").classList.add("has-file");
+    $("#document-photo-status").textContent = "Ảnh đã sẵn sàng để kiểm tra";
   }
   updateDocumentButton();
 }
 
 async function analyzeMedicalDocument() {
-  const file = $("#medical-document-file").files[0];
+  const file = state.uploadFile;
   if (!file || !$("#document-ai-consent").checked || state.busy) return;
   state.busy = true;
   const button = $("#analyze-document");
   const original = button.innerHTML;
   button.disabled = true;
-  button.textContent = "Đang đọc ảnh…";
+  button.textContent = "AI đang đọc và tổng hợp…";
   errorAt("#document-error");
   const epoch = state.authEpoch;
   try {
@@ -1467,8 +1473,10 @@ async function boot() {
     state.documentAiEnabled = Boolean(config.document_ai_enabled);
     state.aiProvider = config.ai_provider || "AI";
     $("#document-ai-provider").textContent = state.aiProvider;
-    $("#upload-record").disabled = !state.documentAiEnabled;
+    $("#upload-record").disabled = false;
     $("#records-ai-off").classList.toggle("hidden", state.documentAiEnabled);
+    $("#document-ai-unavailable").classList.toggle("hidden", state.documentAiEnabled);
+    $(".upload-consent").classList.toggle("hidden", !state.documentAiEnabled);
     $("#google-login").disabled = !config.google_enabled;
     $("#demo-entry").classList.toggle("hidden", !config.demo_enabled);
     const loginError = new URLSearchParams(location.search).get("auth_error");
@@ -1596,6 +1604,7 @@ function bindEvents() {
     if (event.target.type === "checkbox") keepSlotChoice(event.target, SLOTS.map(([key]) => form.elements[key]), form.elements.as_needed);
   });
   $("#medicine-delete").addEventListener("click", () => deleteMedicine(state.editingMedicine));
+  $("#medical-camera-file").addEventListener("change", selectMedicalImage);
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
   $("#document-ai-consent").addEventListener("change", updateDocumentButton);
   $("#analyze-document").addEventListener("click", analyzeMedicalDocument);
