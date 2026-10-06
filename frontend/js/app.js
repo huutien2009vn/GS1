@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { HealthBleClient, VitalSimulator } from "./ble.js";
 import { TrendChart } from "./chart.js";
-import { hydrateIcons } from "./icons.js";
+import { hydrateIcons, icon } from "./icons.js";
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -17,10 +17,10 @@ const MEMBERS = [
   { id: "maternal-grandmother", label: "Bà ngoại", relation: "grandmother", side: "maternal" },
 ];
 const METRICS = [
-  { key: "systolic", label: "Huyết áp", unit: "mmHg" },
-  { key: "heart_rate", label: "Nhịp tim", unit: "lần/phút" },
-  { key: "spo2", label: "Oxy trong máu (SpO₂)", unit: "%" },
-  { key: "glucose", label: "Đường huyết", unit: "mg/dL" },
+  { key: "systolic", label: "Huyết áp", unit: "mmHg", icon: "pressure" },
+  { key: "heart_rate", label: "Nhịp tim", unit: "lần/phút", icon: "heart" },
+  { key: "spo2", label: "Oxy trong máu (SpO₂)", unit: "%", icon: "drop" },
+  { key: "glucose", label: "Đường huyết", unit: "mg/dL", icon: "drop" },
 ];
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
 const LEVELS = { safe: "An toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
@@ -337,8 +337,8 @@ function renderMetrics() {
   $("#metric-grid").innerHTML = METRICS.map(m => {
     const [level, status] = statusOf(m.key, values);
     const measured = values[m.key] != null;
-    const flag = level === "attention" || level === "alert" ? '<span class="reading-flag flag-' + level + '">' + status + "</span>" : "";
-    return '<div class="reading"><span class="reading-name">' + m.label + "</span>" + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></span>" + rangeBar(m.key, values[m.key]) : '<span class="reading-value empty">Chưa đo</span>') + flag + "</div>";
+    const flag = measured ? '<span class="reading-flag tag ' + level + '">' + status + '</span>' : '<span class="reading-placeholder">Chưa có số đo được ghi</span>';
+    return '<div class="reading"><span class="metric-icon">' + icon(m.icon) + '</span><span class="reading-name">' + m.label + '</span>' + (measured ? '<span class="reading-value">' + valueOf(m.key, values) + '<small>' + m.unit + '</small></span>' + rangeBar(m.key, values[m.key]) : '<span class="reading-value empty">Chưa đo</span>') + flag + '</div>';
   }).join("");
   placeRanges($("#metric-grid"));
 }
@@ -410,6 +410,7 @@ function renderDashboard() {
   const recent = r && !isEmergency(r) ? recentEmergency() : null;
   const level = r ? (recent ? "watch" : levelOf(r)) : "neutral";
   renderEmergency(r);
+  $("#quick-actions").classList.toggle("hidden", level === "emergency");
   const status = $("#risk-status");
   status.className = "status-word " + ({ emergency: "alert", watch: "attention" }[level] || level);
   status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
@@ -425,6 +426,17 @@ function renderDashboard() {
   renderMetrics();
   renderTips();
   renderMedicineLink();
+}
+function showHistoryTab(tab) {
+  const charts = tab === "charts";
+  $("#history-charts-panel").classList.toggle("hidden", !charts);
+  $("#history-readings-panel").classList.toggle("hidden", charts);
+  $$("[data-history-tab]").forEach(button => {
+    const active = button.dataset.historyTab === tab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (charts) renderTrends();
 }
 // Charts show what the readings table shows: whole numbers, except SpO₂ which keeps one decimal.
 const chartValue = (key, value) => key === "spo2" ? value : Math.round(value);
@@ -1519,6 +1531,12 @@ function bindEvents() {
     const tab = event.target.closest("[data-records-tab]");
     if (tab) { state.recordsTab = tab.dataset.recordsTab; renderRecordsTab(); }
     if (event.target.closest("[data-open-medicines]")) { state.recordsTab = "medicines"; navigate("records"); }
+    if (event.target.closest("[data-open-documents]")) { state.recordsTab = "documents"; navigate("records"); }
+    if (event.target.closest("[data-open-report]")) openReport();
+    const historyTab = event.target.closest("[data-history-tab]");
+    if (historyTab) showHistoryTab(historyTab.dataset.historyTab);
+    const historyView = event.target.closest("[data-history-view]");
+    if (historyView) { navigate("history"); showHistoryTab(historyView.dataset.historyView); }
     const editMedicine = event.target.closest("[data-edit-medicine]");
     if (editMedicine) openMedicine(editMedicine.dataset.editMedicine);
 
