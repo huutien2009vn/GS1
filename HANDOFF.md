@@ -6,10 +6,10 @@ Read this before doing anything. It describes the current state only. The longer
 
 - **Project folder:** `F:\CLAUDE CODE\GeneSense-share` (Windows 11).
 - **Repository:** https://github.com/yosidalogarit/genesense (private).
-- **Branch:** `master` is at `df2bbfa` (PR #31 merged). Old merged branches stay: the owner chose to keep them (3 October 2026).
-- **Pull requests:** #1 to #31 are merged; #32 (phone menu icon and back link) is open. Never branch from merged feature branches, always from an up-to-date `master`.
+- **Branch:** `master` is at `a661d43` (PR #35 merged). Old merged branches stay: the owner chose to keep them (3 October 2026).
+- **Pull requests:** #1 to #35 are merged; none open (11 October 2026). Never branch from merged feature branches, always from an up-to-date `master`.
 - **Tests:** 37 backend tests pass with a plain `pytest` run.
-- **Service worker cache name:** `genesense-v53` on the live site; `genesense-v54` in PR #32.
+- **Service worker cache name:** `genesense-v65` (master and live after PR #35).
 - **Design critique scores so far:** 24, 25, 27 out of 40 for the whole app; 25 out of 40 for the "Di truyền" tab alone (1 October 2026); **27 out of 40 for the medicine schedule** (2 October 2026). The findings of the last two runs were fixed afterwards, but neither critique was re-run, so there is no newer score. Reports are in `.impeccable/critique/`. A session may list a bundled `anthropic-skills:impeccable`; invoking it loads the instructions, but its script folder did not exist on disk. Run the scripts from the local copy at `F:\CLAUDE CODE\.agents\skills\impeccable` (same instructions, with the binary).
 - **Hosting:** the app is **live at https://genesense-five.vercel.app** (Vercel team "GeneSense", project `genesense`, free Hobby plan) with a **Neon** PostgreSQL database (Neon project id `fragrant-glade-42196249`, branch `production`). Vercel redeploys on every push to `master`. The Vercel connector in this setup cannot read that team, so check the site over plain HTTP.
 - **In progress (11 October 2026):** raising the design-review score to 30+. PRs #32 and #33 are merged and live (checked 11 October, cache `genesense-v63`). Round 10 (`feat/polish-round-10`, cache `genesense-v64`) shortens Di truyền and Hồ sơ on phones, adds help for the range bars and for measuring, and records when blood sugar was measured. Design-review scores (sub-agent A): 25 → 27 → 27 → 28 → 29 → 27 → 27/40; each fresh reviewer finds new issues, so scores move about ±2 between runs; snapshots are in `.impeccable/critique/`. Owner said no to: a "Hủy" button in the measuring dialog, blue for the "✓ Đã uống" tick, moving the medicine tick under the name on phones, latest value per card on Hôm nay, a key in each chart card, a denser side-menu panel.
@@ -83,6 +83,20 @@ GeneSense AI Core is a web app (PWA) for chronic-disease screening and home vita
 - **The `claude` terminal command is not installed** on this PC. The owner uses the desktop app.
 - **PDF pages cannot be rendered here** (no `pdftoppm`), so printed layouts cannot be inspected by eye from a session.
 - **Design skills:** `F:\CLAUDE CODE\.agents\skills\impeccable` (run `scripts/impeccable context` from the project folder first; a critique is two independent sub-agents, a design review and a detector scan), plus `design-taste-frontend`, `redesign-existing-projects` and `minimalist-ui` in the same skills folder. A `dataviz` skill is available for charts. With the Content-Security-Policy in place, the critique's in-page overlay (a script injected from `http://localhost:<port>`) is refused by the browser; the CLI detector still works, and the report should say the overlay was blocked.
+
+### ESP32 demo board (owner's hardware, 11 October 2026)
+
+The owner has a small ESP32-S3 board with a screen and a speaker that now acts as a Bluetooth "measuring device" for GeneSense demos. The sketch is in the repository at `hardware/esp32-vitals-demo/` (with a README on wiring, settings and connecting); the owner's working copy is `Documents\Arduino\genesense\genesense.ino`.
+
+- **Board:** silkscreen "XH-S3E-AI_V1.0", module Sparkle IoT XH-S3E, **ESP32-S3 N16R8** (16 MB flash, 8 MB octal PSRAM), AMS1117-3.3 regulator, USB-C.
+- **Pins confirmed by testing:** OLED 0.96" SSD1306 128×64 at I²C **0x3C, SDA = GPIO41, SCL = GPIO42**; I²S speaker amplifier **BCLK 15, LRCK 16, DOUT 7**; the **IO0** button (also the download-mode button) and **RST**. Not confirmed: the microphone (the XiaoZhi "bread-compact" layout puts it on 4/5/6), the RGB LED, and buttons on GPIO39 and GPIO40 (both have pull-ups).
+- **Screen socket:** the 8-socket header reads, from the end next to the RGB LED and IO0, **GND · 3V3 · IO42/SCL · IO41/SDA · VIN · GND · RXD · TXD**. The screen (GND VDD SCK SDA) belongs in sockets 1 to 4. It was once found two sockets too far towards TXD, which left it unpowered.
+- **The screen needs a moment after power-up:** the first I²C probe can get no answer (code 2). Retry up to 5 times, 300 ms apart, and call `display.begin(SSD1306_SWITCHCAPVCC, 0x3C, true, false)` (the last `false` stops the library restarting I²C on other pins).
+- **Arduino IDE 2.3.10 setup:** board package **"esp32 by Espressif Systems" 3.3.x** (the "Arduino ESP32 Boards" package targets the Nano ESP32 and is not needed); board **ESP32S3 Dev Module**; USB CDC On Boot **Enabled**; Flash Size **16MB**; PSRAM **OPI PSRAM**; Partition Scheme **16M Flash (3MB APP/9.9MB FATFS)** (the Bluetooth sketch does not fit the default); Erase All Flash Before Sketch Upload **Disabled** except for a one-off clean-up. Libraries: Adafruit SSD1306 and Adafruit GFX; `ESP_I2S` comes with the board package. If an upload cannot connect: hold IO0, tap RST, release IO0.
+- **The demo sketch ("GeneSense-Vitals"):** advertises the standard Bluetooth Heart Rate (0x180D / 0x2A37), Pulse Oximeter (0x1822 / 0x2A5F) and Blood Pressure (0x1810 / 0x2A35) services and sends **mock** values every second (heart rate around 74, SpO₂ around 97.6 %, blood pressure around 119/77). The screen shows "DEMO", the BLE state, a beating heart and the numbers; the speaker beeps on each beat; IO0 mutes it. GeneSense's "Ghi chỉ số → Kết nối máy đo → Kết nối" reads it with no app change (`frontend/js/ble.js`): Chrome or Edge, https or localhost, and do not pair the board in Windows settings. **Use a trial account:** the app saves the mock values as real device readings.
+- **Power lesson (cost a long session):** with a worn cable or a weak USB port the board restarted whenever the radio (Bluetooth or Wi-Fi) started: "Brownout detector was triggered", then silent resets with reset reason 1 (power-on), and the USB port dropping out on every restart. A different cable and USB port fixed it. Software workarounds did not help and some made it worse: writing 0 to `RTC_CNTL_BROWN_OUT_REG` on the S3 caused an immediate reset loop, and `setCpuFrequencyMhz(80)` was a suspect. `esp_brownout_disable()` is the clean way to switch the check off but only hides a weak supply; leave the check on with good power. Some USB-C cables carry power only: the board runs but no COM port appears.
+- **Original firmware:** XiaoZhi AI (voice assistant), release `v2.5.0_bread-compact-wifi-128x64` from github.com/78/xiaozhi-esp32. To restore it, flash `merged-binary.bin` at address **0x0** with https://espressif.github.io/esptool-js/ (close Arduino IDE first, or the port is busy).
+- **Next step the owner was offered:** a MAX30102 heart-rate and SpO₂ sensor (buy a 3.3 V-compatible module) on the same I²C pins as the screen (address 0x57), replacing the mock values with real ones. Hobby-grade accuracy; still not a medical device.
 
 ## 4. Owner's decisions (do not reverse without asking)
 
@@ -330,7 +344,8 @@ Ask the owner which one to do next. Rough priority order:
    - cleanup of old trial accounts in the **local** database (the 3-day cleanup only runs where `DEMO_PUBLIC=true`, that is on the live site and the tunnel).
 8. **Mobile app direction (discussed, nothing built):** Android first, by wrapping the existing site; iOS later because Safari has no Web Bluetooth. Before any store release the app needs PNG icons (192 and 512px) and an `apple-touch-icon`, notifications, offline entry, and a privacy policy page. HTTPS hosting with Neon is done.
 9. **Paging for readings beyond 100** (the report note is a stopgap).
-10. **Smaller polish items:**
+10. **ESP32 board with a real sensor:** wire a MAX30102 to the demo board and send real heart rate and SpO₂ instead of mock values (see "ESP32 demo board" in section 3).
+11. **Smaller polish items:**
    - on a 375×812 screen, "Ghi chỉ số" and "Đo lại" sit partly under the bottom tab bar until the user scrolls;
    - the blood-pressure chart has no 180/120 danger line;
    - "Nên đi khám sớm" and "Nguy hiểm" use the same red tag. This is an open polish item, not an accepted exception; the owner has not chosen the fix, so ask (options: amber for "Nên đi khám sớm", or a different shape);
@@ -345,15 +360,15 @@ Ask the owner which one to do next. Rough priority order:
    - "Hiển thị thêm" shows all remaining readings at once (up to 97); the owner was offered steps of 10 and has not answered;
    - `PRODUCT.md` still says original images are never stored and does not mention the medicine schedule; it is in git, so it changes through a pull request;
    - findings of the medicine-schedule critique that were not acted on: no undo after deleting a medicine, no way to pause a medicine without deleting it, and the date field shows the browser's own date format.
-11. **Run the design critique again** to get a new score for the Di truyền tab, the medicine schedule and the whole app.
-12. **Giấy tờ, not yet verified:**
+12. **Run the design critique again** to get a new score for the Di truyền tab, the medicine schedule and the whole app.
+13. **Giấy tờ, not yet verified:**
    - `gemini-3.6-flash` as the fallback for documents and its handling of the repaired parsing (every verified scan ran on `gemini-3.1-flash-lite`);
    - a Vietnamese prescription through the medicine review step, and the "Chưa bắt đầu" and "Đã hết đợt" tags on real data;
    - the sideways scroll on a real Pixel 9 or iPhone: it was reproduced and fixed only for a page whose width changes after the charts were drawn; a fresh phone-width load never overflowed in Edge. If the owner still sees it, ask which tab;
    - a phone photo of a real paper document (rotation, glare, handwriting);
    - "Lưu ảnh" on a real phone (verified in Edge on a PC only, where the file downloads and the app stays in place). On an iPhone, Safari puts downloads in the Files app, not in Photos; inside in-app browsers such as Zalo a download may not be offered. The owner has **no plan for an iPhone-specific way** (the share sheet was offered and declined on 2 October 2026), so leave it as a plain download;
    - the profile picture: a real finger drag in the crop dialog, a rotated camera photo, "Xóa ảnh" through the UI, and the header link while viewing a relative.
-13. **Giấy tờ, possible next steps:** a glucose unit read from the document and converted in code instead of by the model; more data types than hereditary and cardiovascular; removing the reading when its document is deleted.
+14. **Giấy tờ, possible next steps:** a glucose unit read from the document and converted in code instead of by the model; more data types than hereditary and cardiovascular; removing the reading when its document is deleted.
 
 ## 7. How the work is done here (follow this flow)
 
