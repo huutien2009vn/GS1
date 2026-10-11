@@ -86,7 +86,7 @@ GeneSense AI Core is a web app (PWA) for chronic-disease screening and home vita
 
 ### ESP32 demo board (owner's hardware, 11 October 2026)
 
-The owner has a small ESP32-S3 board with a screen and a speaker that now acts as a Bluetooth "measuring device" for GeneSense demos. Nothing about it is in the repository; the Arduino sketch lives in the owner's Arduino sketch folder.
+The owner has a small ESP32-S3 board with a screen and a speaker that now acts as a Bluetooth "measuring device" for GeneSense demos. The sketch is in the repository at `hardware/esp32-vitals-demo/` (with a README on wiring, settings and connecting); the owner's working copy is `Documents\Arduino\genesense\genesense.ino`.
 
 - **Board:** silkscreen "XH-S3E-AI_V1.0", module Sparkle IoT XH-S3E, **ESP32-S3 N16R8** (16 MB flash, 8 MB octal PSRAM), AMS1117-3.3 regulator, USB-C.
 - **Pins confirmed by testing:** OLED 0.96" SSD1306 128×64 at I²C **0x3C, SDA = GPIO41, SCL = GPIO42**; I²S speaker amplifier **BCLK 15, LRCK 16, DOUT 7**; the **IO0** button (also the download-mode button) and **RST**. Not confirmed: the microphone (the XiaoZhi "bread-compact" layout puts it on 4/5/6), the RGB LED, and buttons on GPIO39 and GPIO40 (both have pull-ups).
