@@ -4,10 +4,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
-Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer"]
-Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother"]
+# The last four are single-gene hereditary conditions for the "Bệnh di truyền" screen (services/hereditary.py);
+# they do not move the family-risk levels or the score.
+Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer",
+                    "ovarian_cancer", "thalassemia", "g6pd", "familial_hypercholesterolemia"]
+Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother", "uncle"]
 FamilyMember = Literal["father", "mother", "sibling", "paternal-grandfather", "paternal-grandmother",
-                       "maternal-grandfather", "maternal-grandmother"]
+                       "maternal-grandfather", "maternal-grandmother", "maternal-uncle"]
 MeasurementSource = Literal["manual", "ble", "simulation", "document"]
 
 
@@ -32,13 +35,17 @@ class FamilyHistoryInput(BaseModel):
     member_id: str | None = None
     side: Literal["immediate", "paternal", "maternal"] = "immediate"
     knowledge: Literal["unknown", "none", "known"] = "unknown"
-    # How many people this entry stands for; only the "siblings" entry uses more than one.
+    # How many people this entry stands for; only the "siblings" and "maternal uncles" entries use more than one.
     affected_count: int = Field(default=1, ge=1, le=10)
+    # Of the affected siblings, how many are brothers (the rest are sisters). Needed for patterns seen in males.
+    affected_brothers: int = Field(default=0, ge=0, le=10)
 
     @model_validator(mode="after")
     def consistent_history(self):
         if self.knowledge == "none" and self.conditions:
             raise ValueError("Không thể chọn không có bệnh cùng với một bệnh đã biết.")
+        if self.affected_brothers > self.affected_count:
+            raise ValueError("Số anh em trai mắc bệnh không thể lớn hơn tổng số anh chị em mắc bệnh.")
         return self
 
 
@@ -152,6 +159,8 @@ class AccountProfile(BaseModel):
     ai_consent: bool = False
     # Medication data stays private unless the patient explicitly enables caregiver access.
     share_medications: bool = False
+    # Parents related by blood raise the chance of recessive hereditary conditions such as thalassemia.
+    parents_related: Literal["yes", "no", "unknown"] = "unknown"
     health_consent: Literal[True]
 
     @model_validator(mode="after")
