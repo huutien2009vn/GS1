@@ -1,6 +1,6 @@
 # Plan: "Xác định bệnh di truyền" (hereditary disease identification)
 
-Status: **proposal, not approved** (15 October 2026). Nothing here is built. Decisions the owner still has to make are listed in section 7; UI work also needs mockups first (the owner's standing rule).
+Status: **approved in part** (15 October 2026). Owner's decisions: **layer A first, then B; C later**; start with **4 diseases** (thalassemia, G6PD deficiency, BRCA, familial hypercholesterolemia); shown **inside Di truyền**; the form adds **sex of affected siblings, parents closely related and mother's brothers**, and still **no ages**. Step 1 (backend rules) is PR #38. UI work needs mockups first (the owner's standing rule).
 
 ## 1. Where GeneSense is today
 
