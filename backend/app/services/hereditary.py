@@ -51,8 +51,7 @@ def hereditary_screen(account: AccountProfile) -> list[dict]:
     who = affected("thalassemia")
     reasons = []
     if who:
-        reasons.append("Gia đình có người bị tan máu bẩm sinh (thalassemia). Bệnh truyền khi cả bố và mẹ cùng mang gen, "
-                       "nên người khỏe mạnh vẫn có thể mang gen.")
+        reasons.append("Gia đình có người bị thalassemia. Người khỏe mạnh vẫn có thể mang gen mà không biết.")
     if account.parents_related == "yes":
         reasons.append("Bố mẹ có họ hàng gần, nên dễ cùng mang một gen bệnh lặn như thalassemia.")
     screens.append(result("thalassemia", reasons, who, unknown("father", "mother") or account.parents_related == "unknown",
@@ -62,8 +61,7 @@ def hereditary_screen(account: AccountProfile) -> list[dict]:
     maternal_line = affected("g6pd", {"mother", "maternal-grandfather", "maternal-uncle", "sibling"})
     reasons = []
     if maternal_line:
-        reasons.append("Thiếu men G6PD di truyền qua nhiễm sắc thể X: thường gặp ở nam giới bên ngoại "
-                       "(ông ngoại, cậu) và anh em trai.")
+        reasons.append("Bệnh thường gặp ở nam giới bên ngoại (ông ngoại, cậu) và anh em trai.")
     father = affected("g6pd", {"father"})
     if father and female:
         reasons.append("Bố bị thiếu men G6PD: con gái thường mang gen này.")

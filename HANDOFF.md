@@ -217,6 +217,7 @@ The look the friend's redesign introduced (PR #24, merged through #25) is the de
 - Conditions tracked: hypertension, diabetes, cardiovascular disease, stroke, dyslipidemia, breast cancer, colorectal cancer. The last three were added at the owner's request. The owner declined collecting age at diagnosis.
 - The form records **how many siblings** are affected.
 - The 0 to 100 score keeps its formula; only its inputs were fixed (live from the profile, unknown relatives flagged, BMI from 23, cancers do not move it).
+- **Bệnh di truyền (single-gene screen, owner 15 October 2026):** thalassemia, G6PD deficiency, BRCA (breast and ovarian) and familial hypercholesterolemia, ruled by inheritance pattern in `backend/app/services/hereditary.py` (plan: `docs/plans/xac-dinh-benh-di-truyen.md`). Asked on a 4th wizard page "Bệnh di truyền trong gia đình" (who has each disease, including "Bạn" and "Cậu", plus "Bố mẹ có họ hàng gần"; the consent moved to that page); the siblings card asks how many affected siblings are brothers. Shown on Di truyền before the family tree: diseases flagged "Nên hỏi bác sĩ" as cards with a **blue** tag (never amber, so it is not read as a risk level), the rest one line per status. No percentages, no ages. Needs a clinician's review before anything beyond a demo.
 - On phones the bottom bar label is "Lịch sử" (the page heading stays "Lịch sử đo") so five items fit on one line.
 
 ### Public access
