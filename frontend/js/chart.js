@@ -1,7 +1,7 @@
 // Small SVG trend chart: one y-axis, a reference band, 2px lines, >=8px markers,
 // a crosshair tooltip on hover/keyboard, and a direct label on the latest value.
 const NS = "http://www.w3.org/2000/svg";
-const HEIGHT = 200;
+const DEFAULT_HEIGHT = 200;
 const PAD = { top: 14, right: 52, bottom: 30, left: 42 };
 const valueFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
 const pad = n => String(n).padStart(2, "0");
@@ -55,7 +55,7 @@ export class TrendChart {
     });
   }
 
-  // config: { unit, band: [lo, hi] | null, thresholds: [{ value, color, label }], min, max, times: [Date], series: [{ label, color, values: [number] }] }
+  // config: { unit, band: [lo, hi] | null, thresholds: [{ value, color, label }], min, max, times: [Date], series: [{ label, color, values: [number] }], height? }
   set(config) {
     this.config = config;
     this.active = -1;
@@ -73,6 +73,7 @@ export class TrendChart {
     const width = this.host.clientWidth;
     const c = this.config;
     if (!width || !c || !c.times.length) return;
+    const HEIGHT = c.height || DEFAULT_HEIGHT;
     const all = c.series.flatMap(s => s.values);
     // Round the axis to a readable step so ticks land on whole numbers (60, 100, 140...).
     const lo = Math.min(c.min, ...all), hi = Math.max(c.max, ...all);

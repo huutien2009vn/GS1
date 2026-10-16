@@ -1751,13 +1751,43 @@ function offerDeviceImport() {
   const reading = state.deviceImport;
   const dialog = $("#device-import-dialog");
   if (!reading || dialog.open) return;
-  $("#device-import-when").textContent = reading.takenAt ? "Đo lúc " + date(new Date(reading.takenAt).toISOString()) + ", máy đo GeneSense."
+  $("#device-import-when").textContent = reading.takenAt ? "Đo lúc " + date(new Date(reading.takenAt).toISOString())
     : "Máy đo chưa có giờ, nên lần đo sẽ được ghi là vừa xong.";
+  const takenAt = new Date(reading.takenAt || Date.now());
   const values = { heart_rate: reading.heart_rate, spo2: reading.spo2 };
-  $("#device-import-values").innerHTML = METRICS.filter(m => values[m.key] != null)
-    .map(m => "<div><span>" + m.label + "</span><strong>" + esc(withUnit(valueOf(m.key, values), m.unit)) + "</strong></div>").join("");
+  const shown = METRICS.filter(m => values[m.key] != null);
+  const host = $("#device-import-values");
+  host.innerHTML = shown.map(m => importCard(m, values, takenAt)).join("");
+  placeRanges(host);
+  // Each chart: up to 6 earlier readings of that value, then this one (the filled point on the right).
+  host.querySelectorAll(".import-trend").forEach(chartHost => {
+    const key = chartHost.dataset.key, spec = TRENDS[key], before = importHistory(key, takenAt);
+    const rows = [...before.map(row => ({ time: toDate(row.created_at), value: chartValue(key, row.vitals[key]) })), { time: takenAt, value: chartValue(key, values[key]) }];
+    new TrendChart(chartHost).set({ height: 150, unit: spec.unit, band: spec.band, thresholds: [], min: spec.min, max: spec.max, times: rows.map(r => r.time),
+      series: [{ label: spec.series[0][1], color: spec.series[0][2], values: rows.map(r => r.value), flags: rows.map(r => statusOf(key, { [key]: r.value })[0] !== "safe") }] });
+  });
+  $("#device-import-danger").classList.toggle("hidden", !shown.some(m => statusOf(m.key, values)[0] === "alert"));
   errorAt("#device-import-error");
   openDialog(dialog);
+}
+// The readings of one value saved before this one, oldest first (at most 6, as many as fit a small chart).
+function importHistory(key, takenAt) {
+  return state.records.filter(row => row.vitals?.[key] != null && toDate(row.created_at) < takenAt).slice(0, 6).reverse();
+}
+function importCard(m, values, takenAt) {
+  const [level, word] = statusOf(m.key, values);
+  const before = importHistory(m.key, takenAt);
+  const last = before.at(-1);
+  const compare = last ? "Lần trước: " + withUnit(valueOf(m.key, last.vitals), m.unit) + ", lúc " + date(last.created_at) + "." : "";
+  return '<section class="import-metric"><div class="import-metric-head"><span class="metric-icon">' + icon(m.icon) + "</span><h3>" + m.label + "</h3></div>" +
+    '<div class="import-value-row"><p class="import-value">' + valueOf(m.key, values) + "<small>" + m.unit + "</small></p>" +
+    '<span class="tag ' + level + ' import-status"><span class="value-mark ' + level + '" aria-hidden="true"></span>' + word + "</span></div>" +
+    rangeBar(m.key, values[m.key]) +
+    (before.length
+      ? '<p class="import-trend-label">Lần này so với ' + before.length + " lần đo trước</p>" +
+        '<div class="trend-chart import-trend" data-key="' + m.key + '"></div><p class="visually-hidden">' + esc(compare) + "</p>"
+      : '<p class="import-first">Chưa có lần đo nào trước đây để so sánh.</p>') +
+    "</section>";
 }
 // The same link always gives the same id, so tapping it twice saves the reading once (the server keeps the first).
 async function deviceClientId(reading) {

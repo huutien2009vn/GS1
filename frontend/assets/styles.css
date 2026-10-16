@@ -579,6 +579,25 @@ details[open]::details-content { block-size: auto; }
 #disconnect-device { margin-top: 8px; }
 .detail-gap { margin-top: 16px; }
 .result-detail-vitals { border: 1px solid var(--line); border-radius: var(--radius); padding: 0 16px; margin: 16px 0; }
+/* "Chỉ số từ máy đo": one card per value with its range bar and a small chart against the readings before it. */
+.import-source { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; }
+.import-source > div { display: flex; flex-direction: column; line-height: 1.4; }
+.import-source #device-import-when { color: var(--ink-2); font-size: .889rem; }
+.import-cards { display: grid; gap: 14px; margin-bottom: 16px; }
+#device-import-danger { margin-bottom: 14px; }
+/* The button bar covers the dialog's bottom padding too, so cards never show underneath it while scrolling. */
+#device-import-dialog .sticky-actions { bottom: -24px; margin-bottom: -24px; padding-bottom: 24px; }
+.import-metric { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, #fff 0%, #f6faff 100%); box-shadow: 0 4px 14px #16345e0a; }
+.import-metric-head { display: flex; align-items: center; gap: 10px; }
+.import-metric-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 1rem; line-height: 1.35; }
+.import-value-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin: 12px 0 10px; }
+.import-status { display: inline-flex; align-items: center; gap: 6px; }
+.import-value { margin: 0; font-size: 2.2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.import-value small { margin-left: 6px; color: var(--ink-2); font-size: .889rem; font-weight: 400; }
+.import-metric .range { width: 100%; margin: 4px 0 30px; }
+.import-trend-label { margin: 0 0 2px; color: var(--ink-2); font-size: .889rem; }
+.trend-chart.import-trend { height: 150px; }
+.import-first { margin: 0; color: var(--ink-2); font-size: .889rem; }
 .result-detail-vitals > div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .result-detail-vitals > div:last-child { border-bottom: 0; }
 .result-detail-vitals strong { font-variant-numeric: tabular-nums; }
@@ -766,6 +785,7 @@ body.viewing .own-only { display: none !important; }
   .onboarding-form { padding: 20px 16px; }
   .wizard-actions .btn.primary { min-width: 0; flex: 1; }
   dialog { padding: 20px 16px; }
+  #device-import-dialog .sticky-actions { bottom: -20px; margin-bottom: -20px; padding-bottom: 20px; }
   .toast-region { bottom: 88px; }
   .mobile-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: rgba(255, 255, 255, .78); border-top: 1px solid #dce8f49c; -webkit-backdrop-filter: blur(22px) saturate(155%); backdrop-filter: blur(22px) saturate(155%); box-shadow: 0 -8px 28px #10264b12; padding: 6px 8px max(6px, env(safe-area-inset-bottom)); gap: 4px; }
   .mobile-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 58px; padding: 6px 0; border: 0; border-radius: 14px; background: transparent; color: var(--ink-2); font-size: .889rem; font-weight: 600; transition: color .2s ease-out, background-color .2s ease-out, transform .2s ease-out; }
