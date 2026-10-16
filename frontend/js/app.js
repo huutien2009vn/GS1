@@ -33,7 +33,7 @@ const METRICS = [
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
 const LEVELS = { safe: "An toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
 const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Hãy đo lại.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
-const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu", document: "Từ giấy tờ" };
+const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu", document: "Từ giấy tờ", device: "Máy đo GeneSense" };
 // Readings copied from a scanned document are history: dated by the document and never the current state.
 const fromDocument = record => (record.vitals?.source || record.measurement_source) === "document";
 const when = record => date(record.created_at, !fromDocument(record));
@@ -493,6 +493,7 @@ async function nextStep(event) {
     await Promise.all([refreshRecords(), refreshCare(), refreshRisk()]);
     navigate(wasEditing ? state.editReturn : "dashboard");
     toast(wasEditing ? "Đã lưu hồ sơ." : "Đã lưu hồ sơ. Bạn có thể ghi chỉ số đầu tiên.");
+    offerDeviceImport();
   } catch (error) { errorAt("#onboarding-error", error.message); }
   finally { button.disabled = false; button.innerHTML = original; }
 }
@@ -1120,6 +1121,7 @@ async function exitViewing() {
   personalize(); renderDashboard(); renderHistory();
   navigate("dashboard");
   refreshCare();
+  offerDeviceImport();
 }
 
 function analysisMarkup(analysis) {
@@ -1696,6 +1698,111 @@ function vitalsProblem(values, fromPaper = false) {
   if (values.systolic != null && values.systolic <= values.diastolic) return "Số tâm thu cần lớn hơn số tâm trương. Hãy kiểm tra lại " + (fromPaper ? "giấy tờ." : "máy đo.");
   return "";
 }
+// A GeneSense measuring device (the UNIHIKER K10 sketch) links here as
+// "#nhap-may-do?hr=78&spo2=97&t=1760600000" (t = Unix seconds, left out when the device has no clock).
+// The numbers ride after "#", which browsers never send to a server. Nothing is saved until the person taps "Lưu chỉ số".
+const DEVICE_IMPORT_ROUTE = "nhap-may-do";
+const DEVICE_IMPORT_KEY = "genesense-device-import";
+function parseDeviceImport(params) {
+  const num = key => { const v = params.get(key); return v !== null && /^\d{1,3}(\.\d)?$/.test(v) ? Number(v) : null; };
+  const heartRate = num("hr"), spo2 = num("spo2");
+  if (heartRate === null && spo2 === null) return null;
+  if ((heartRate !== null && (heartRate < 20 || heartRate > 260)) || (spo2 !== null && (spo2 < 50 || spo2 > 100))) return null;
+  let takenAt = null;
+  const t = params.get("t");
+  if (t !== null) {
+    if (!/^\d{9,11}$/.test(t)) return null;
+    takenAt = Number(t) * 1000;
+    // The same window the server accepts: not in the future, not older than 90 days.
+    if (takenAt > Date.now() + 5 * 60 * 1000 || takenAt < Date.now() - 90 * 24 * 60 * 60 * 1000) return null;
+  }
+  return { heart_rate: heartRate, spo2, takenAt };
+}
+function takeDeviceImportFromLink() {
+  const hash = location.hash;
+  if (hash.startsWith("#" + DEVICE_IMPORT_ROUTE)) {
+    // Take the numbers out of the address bar and the back history straight away.
+    window.history.replaceState(null, "", location.pathname + location.search);
+    const query = hash.indexOf("?");
+    const reading = query < 0 ? null : parseDeviceImport(new URLSearchParams(hash.slice(query + 1)));
+    state.deviceImport = reading;
+    state.deviceImportBad = !reading;
+    try { if (reading) sessionStorage.setItem(DEVICE_IMPORT_KEY, JSON.stringify(reading)); else sessionStorage.removeItem(DEVICE_IMPORT_KEY); } catch {}
+    return;
+  }
+  // Coming back from Google sign-in: the reading waited in this tab's session storage.
+  if (!state.deviceImport) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(DEVICE_IMPORT_KEY) || "null");
+      if (saved) state.deviceImport = parseDeviceImport(new URLSearchParams({ ...(saved.heart_rate != null && { hr: String(saved.heart_rate) }),
+        ...(saved.spo2 != null && { spo2: String(saved.spo2) }), ...(saved.takenAt != null && { t: String(Math.round(saved.takenAt / 1000)) }) }));
+    } catch {}
+  }
+}
+function clearDeviceImport() {
+  state.deviceImport = null;
+  try { sessionStorage.removeItem(DEVICE_IMPORT_KEY); } catch {}
+}
+function offerDeviceImport() {
+  if (!state.user) { if (state.deviceImport) errorAt("#login-message", "Đăng nhập để lưu chỉ số từ máy đo."); return; }
+  if (state.viewing && state.deviceImport) { toast("Quay về hồ sơ của bạn để lưu chỉ số từ máy đo."); return; }
+  if (!state.health || state.viewing || $("#app-screen").classList.contains("hidden")) return;
+  if (state.deviceImportBad) { state.deviceImportBad = false; toast("Đường link từ máy đo không hợp lệ. Chưa lưu gì.", "error"); }
+  const reading = state.deviceImport;
+  const dialog = $("#device-import-dialog");
+  if (!reading || dialog.open) return;
+  $("#device-import-when").textContent = reading.takenAt ? "Đo lúc " + date(new Date(reading.takenAt).toISOString()) + ", máy đo GeneSense."
+    : "Máy đo chưa có giờ, nên lần đo sẽ được ghi là vừa xong.";
+  const values = { heart_rate: reading.heart_rate, spo2: reading.spo2 };
+  $("#device-import-values").innerHTML = METRICS.filter(m => values[m.key] != null)
+    .map(m => "<div><span>" + m.label + "</span><strong>" + esc(withUnit(valueOf(m.key, values), m.unit)) + "</strong></div>").join("");
+  errorAt("#device-import-error");
+  openDialog(dialog);
+}
+// The same link always gives the same id, so tapping it twice saves the reading once (the server keeps the first).
+async function deviceClientId(reading) {
+  if (!reading.takenAt || !crypto.subtle) return null;
+  const text = ["genesense-device", reading.takenAt, reading.heart_rate, reading.spo2].join("|");
+  const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))].map(b => b.toString(16).padStart(2, "0")).join("");
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join("-");
+}
+async function saveDeviceImport() {
+  const reading = state.deviceImport;
+  if (!reading || state.busy) return;
+  const values = {};
+  if (reading.heart_rate != null) values.heart_rate = reading.heart_rate;
+  if (reading.spo2 != null) values.spo2 = reading.spo2;
+  const problem = vitalsProblem(values);
+  if (problem) { errorAt("#device-import-error", problem); return; }
+  const body = { vitals: { ...values, timestamp: new Date(reading.takenAt || Date.now()).toISOString() }, source: "device" };
+  const button = $("#device-import-save");
+  const epoch = state.authEpoch;
+  state.busy = true;
+  button.disabled = true; button.textContent = "Đang lưu…";
+  errorAt("#device-import-error");
+  try {
+    const clientId = await deviceClientId(reading);
+    if (clientId) body.client_id = clientId;
+    const r = await api.assess(body);
+    if (epoch !== state.authEpoch) return;
+    const dialog = $("#device-import-dialog");
+    clearDeviceImport();
+    closeDialog(dialog);
+    await Promise.all([refreshRecords(), refreshRisk()]);
+    if (epoch !== state.authEpoch) return;
+    navigate("dashboard");
+    if (!isEmergency(r)) { toast("Đã lưu chỉ số từ máy đo."); return; }
+    // As after any reading: focus moves once the dialog has really closed (the page behind it is inert until then).
+    const showDanger = () => { if (state.result?.id === r.id) $("#emergency-title").focus(); else void showResult(r.id); };
+    if (dialog.open) dialog.addEventListener("close", showDanger, { once: true }); else showDanger();
+  } catch (error) {
+    // The reading stays in the dialog so the person can try again.
+    errorAt("#device-import-error", error.message);
+  } finally {
+    state.busy = false; button.disabled = false; button.textContent = "Lưu chỉ số";
+  }
+}
+
 async function saveMeasurement(values, source, samples = [], takenAt = null) {
   if (state.busy) return;
   const problem = vitalsProblem(values);
@@ -1840,6 +1947,7 @@ async function enterAccount(user) {
     await Promise.all([refreshRecords(), refreshMedicalRecords(), refreshMedications(), refreshCare(), refreshRisk()]);
     navigate(location.hash.slice(1) || "dashboard");
     void syncPendingAssessments();
+    offerDeviceImport();
   }
 }
 async function boot() {
@@ -1862,7 +1970,10 @@ async function boot() {
     let user;
     try { user = await api.me(); } catch (error) { if (error.status !== 401) throw error; }
     if (user) await enterAccount(user);
-    else screen("login");
+    else {
+      screen("login");
+      if (!loginError) offerDeviceImport();
+    }
   } catch (error) {
     $("#loading-screen p").textContent = error.message;
     $("#retry-boot").classList.remove("hidden");
@@ -2089,7 +2200,14 @@ function bindEvents() {
   window.addEventListener("offline", renderSyncStatus);
   accountChannel?.addEventListener("message", () => { clearAccount(); boot(); });
   // Links like the header logo only change the hash; route on every hash change (also back/forward).
-  window.addEventListener("hashchange", () => { if (state.user && state.health) navigate(location.hash.slice(1) || "dashboard"); });
+  window.addEventListener("hashchange", () => {
+    if (location.hash.startsWith("#" + DEVICE_IMPORT_ROUTE)) { takeDeviceImportFromLink(); offerDeviceImport(); return; }
+    if (state.user && state.health) navigate(location.hash.slice(1) || "dashboard");
+  });
+  $("#device-import-save").addEventListener("click", saveDeviceImport);
+  $("#device-import-skip").addEventListener("click", () => closeDialog($("#device-import-dialog")));
+  // However the dialog closes without saving (Bỏ qua, X, Esc, back), the reading is dropped so it does not ask again.
+  $("#device-import-dialog").addEventListener("close", clearDeviceImport);
   window.addEventListener("popstate", () => {
     // Our own step back after a layer closed by its button: only keep the address on the page shown.
     if (layerPops) { layerPops--; if (state.user && state.health) history.replaceState(null, "", "#" + state.view); return; }
@@ -2111,6 +2229,7 @@ function bindEvents() {
   });
 }
 hydrateIcons();
+takeDeviceImportFromLink();
 bindEvents();
 try { applyGlass(localStorage.getItem("genesense-glass") !== "off"); } catch { applyGlass(true); }
 if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
