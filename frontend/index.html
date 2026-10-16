@@ -52,7 +52,7 @@
       <h1 id="onboarding-title">Khai báo hồ sơ sức khỏe</h1>
       <p class="lead">Có thể sửa lại sau.</p>
       <form id="onboarding-form" class="panel onboarding-form" novalidate>
-        <div class="step-progress"><span id="step-caption">Bước 1 trên 3</span><progress id="onboarding-progress" value="1" max="3" aria-label="Tiến độ khai báo"></progress></div>
+        <div class="step-progress"><span id="step-caption">Bước 1 trên 4</span><progress id="onboarding-progress" value="1" max="4" aria-label="Tiến độ khai báo"></progress></div>
         <section data-step="0">
           <h2>Thông tin cá nhân</h2>
           <div class="field-grid">
@@ -82,6 +82,12 @@
             <label class="block-label">Bên nội<textarea id="paternal-notes" rows="2" maxlength="2000"></textarea></label>
             <label class="block-label">Bên ngoại<textarea id="maternal-notes" rows="2" maxlength="2000"></textarea></label>
           </details>
+        </section>
+        <section data-step="3" hidden>
+          <h2>Bệnh di truyền trong gia đình</h2>
+          <p class="note">Chọn những người đã được bác sĩ chẩn đoán. Bỏ qua bệnh không ai mắc hoặc bạn không biết.</p>
+          <div id="hereditary-questions"></div>
+          <fieldset class="chip-field"><legend>Bố mẹ bạn có họ hàng gần với nhau không?</legend><div class="chips" id="parents-related"></div></fieldset>
           <div class="consent-section">
             <label class="check-label"><input id="health-consent" type="checkbox" required><span>Tôi đồng ý lưu thông tin sức khỏe đã khai báo trong tài khoản này.</span></label>
             <label class="check-label"><input id="ai-consent" type="checkbox"><span>Cho phép dùng AI để giải thích kết quả (không bắt buộc).<small>Chỉ gửi chỉ số, thể trạng và bệnh đã chọn đến Google Gemini.</small></span></label>

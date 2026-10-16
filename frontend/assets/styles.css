@@ -238,6 +238,9 @@ body.nav-open { overflow: hidden; }
 .tag.safe { background: var(--green-bg); color: var(--green); }
 .tag.attention { background: var(--amber-bg); color: var(--amber); }
 .tag.alert { background: var(--red-bg); color: var(--red); }
+/* "Nên hỏi bác sĩ" on the hereditary screen: blue, so it reads as advice and is never confused with the amber risk levels. */
+.tag.info { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-soft); color: var(--blue); }
+.tag.info svg { width: 16px; height: 16px; }
 /* Family-risk tab. Level = colour + shape + word (as the status word on Today) plus a 3-step meter.
    Levels stop at amber; red stays reserved for dangerous readings. */
 .risk-level { font-size: 1.11rem; margin: 0; gap: 8px; }
@@ -869,3 +872,7 @@ body.no-glass .app-site-header, body.no-glass .nav-drawer, body.no-glass .mobile
   .facts-2col > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .facts-2col dd { text-align: left; }
 }
+.hereditary-card h3 { margin: 10px 0 2px; }
+.hereditary-card p { margin: 6px 0; }
+.hereditary-rest p { margin: 6px 0; }
+.hereditary-rest { margin-top: 16px; }

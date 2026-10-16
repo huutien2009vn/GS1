@@ -7,6 +7,14 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 const CONDITIONS = [["hypertension", "Tăng huyết áp"], ["diabetes", "Đái tháo đường"], ["cardiovascular", "Bệnh tim mạch"], ["stroke", "Đột quỵ"], ["dyslipidemia", "Rối loạn mỡ máu"], ["breast_cancer", "Ung thư vú"], ["colorectal_cancer", "Ung thư đại trực tràng"]];
+// Single-gene hereditary conditions, asked on their own wizard page; the server screens them (services/hereditary.py).
+const HEREDITARY = [["thalassemia", "Thalassemia (tan máu bẩm sinh)"], ["g6pd", "Thiếu men G6PD"], ["ovarian_cancer", "Ung thư buồng trứng"], ["familial_hypercholesterolemia", "Tăng cholesterol gia đình"]];
+const HEREDITARY_WHO = [["self", "Bạn"], ["father", "Bố"], ["mother", "Mẹ"], ["sibling", "Anh chị em ruột"], ["paternal-grandfather", "Ông nội"], ["paternal-grandmother", "Bà nội"],
+  ["maternal-grandfather", "Ông ngoại"], ["maternal-grandmother", "Bà ngoại"], ["maternal-uncle", "Cậu (anh, em trai của mẹ)"]];
+const NOT_FOR_OVARIAN = new Set(["father", "paternal-grandfather", "maternal-grandfather", "maternal-uncle"]);   // not offered for ovarian cancer
+const SCREENS = { thalassemia: "Thalassemia (tan máu bẩm sinh)", g6pd: "Thiếu men G6PD", brca: "Ung thư vú, buồng trứng di truyền (gen BRCA)", familial_hypercholesterolemia: "Tăng cholesterol gia đình" };
+const PATTERNS = { recessive: "Di truyền lặn: con mắc bệnh khi cả bố và mẹ cùng mang gen", x_linked: "Di truyền qua nhiễm sắc thể X", dominant: "Di truyền trội: có thể nhận gen từ bố hoặc mẹ" };
+const conditionName = key => [...CONDITIONS, ...HEREDITARY].find(([id]) => id === key)?.[1];
 const MEMBERS = [
   { id: "father", label: "Bố", relation: "father", side: "immediate" },
   { id: "mother", label: "Mẹ", relation: "mother", side: "immediate" },
@@ -392,9 +400,17 @@ function fillWizard(health = null) {
     $("#family-" + side).innerHTML = MEMBERS.filter(m => m.side === side).map(member => {
       const saved = health?.family_history?.find(item => item.member_id === member.id);
       const knowledge = saved?.knowledge || "unknown";
-      return '<div class="family-member" data-member="' + member.id + '"><div class="member-top"><strong>' + member.label + '</strong><label class="visually-hidden" for="knowledge-' + member.id + '">Tiền sử ' + member.label + '</label><select id="knowledge-' + member.id + '" data-knowledge><option value="unknown"' + (knowledge === "unknown" ? " selected" : "") + '>Chưa rõ</option><option value="none"' + (knowledge === "none" ? " selected" : "") + '>Không có bệnh đã biết</option><option value="known"' + (knowledge === "known" ? " selected" : "") + '>Có bệnh đã biết</option></select></div><div class="chips"' + (knowledge === "known" ? "" : " hidden") + '>' + conditionChips(member.id, saved?.conditions) + "</div>" + (member.id === "sibling" ? '<label class="member-count"' + (knowledge === "known" ? "" : " hidden") + '>Số anh chị em mắc bệnh<input type="number" inputmode="numeric" data-affected min="1" max="10" value="' + (saved?.affected_count || 1) + '"></label>' : "") + "</div>";
+      return '<div class="family-member" data-member="' + member.id + '"><div class="member-top"><strong>' + member.label + '</strong><label class="visually-hidden" for="knowledge-' + member.id + '">Tiền sử ' + member.label + '</label><select id="knowledge-' + member.id + '" data-knowledge><option value="unknown"' + (knowledge === "unknown" ? " selected" : "") + '>Chưa rõ</option><option value="none"' + (knowledge === "none" ? " selected" : "") + '>Không có bệnh đã biết</option><option value="known"' + (knowledge === "known" ? " selected" : "") + '>Có bệnh đã biết</option></select></div><div class="chips"' + (knowledge === "known" ? "" : " hidden") + '>' + conditionChips(member.id, saved?.conditions) + "</div>" + (member.id === "sibling" ? '<label class="member-count"' + (knowledge === "known" ? "" : " hidden") + '>Số anh chị em mắc bệnh<input type="number" inputmode="numeric" data-affected min="1" max="10" value="' + (saved?.affected_count || 1) + '"></label>' +
+        '<label class="member-count"' + (knowledge === "known" ? "" : " hidden") + '>Trong đó anh, em trai<input type="number" inputmode="numeric" data-brothers min="0" max="10" value="' + (saved?.affected_brothers || 0) + '"></label>' : "") + "</div>";
     }).join("");
   }
+  const hasHereditary = (who, key) => who === "self" ? p?.known_conditions?.includes(key) : health?.family_history?.find(item => item.member_id === who)?.conditions?.includes(key);
+  $("#hereditary-questions").innerHTML = HEREDITARY.map(([key, label]) => '<fieldset class="chip-field" data-hereditary="' + key + '"><legend>' + label + '</legend><div class="chips">' +
+    HEREDITARY_WHO.filter(([who]) => key !== "ovarian_cancer" || !NOT_FOR_OVARIAN.has(who)).map(([who, name]) =>
+      '<label><input type="checkbox" value="' + who + '"' + (hasHereditary(who, key) ? " checked" : "") + "><span>" + name + "</span></label>").join("") + "</div></fieldset>").join("");
+  const related = health?.parents_related || "unknown";
+  $("#parents-related").innerHTML = [["yes", "Có"], ["no", "Không"], ["unknown", "Không rõ"]].map(([value, label]) =>
+    '<label><input type="radio" name="parents_related" value="' + value + '"' + (value === related ? " checked" : "") + "><span>" + label + "</span></label>").join("");
   $("#onboarding-exit").textContent = state.editing ? "Quay lại" : "Đăng xuất";
   $("#onboarding-title").textContent = !state.editing ? "Khai báo hồ sơ sức khỏe" : state.editReturn === "genetics" ? "Sửa tiền sử gia đình" : "Sửa hồ sơ sức khỏe";
   state.step = 0;
@@ -405,13 +421,16 @@ function updateBmi() {
   const h = Number($("#height").value) / 100, w = Number($("#weight").value);
   $("#bmi-output").textContent = h > 0 && w > 0 ? "Chỉ số BMI: " + num(w / h ** 2) : "";
 }
+const LAST_STEP = 3;
+const hereditaryPicks = key => $$('[data-hereditary="' + key + '"] input:checked').map(el => el.value);
+const hereditaryFor = who => HEREDITARY.map(([key]) => key).filter(key => hereditaryPicks(key).includes(who));
 function showStep() {
   $$("[data-step]").forEach(el => el.hidden = Number(el.dataset.step) !== state.step);
   $$("[data-step-indicator]").forEach(el => { el.classList.toggle("active", Number(el.dataset.stepIndicator) === state.step); el.classList.toggle("done", Number(el.dataset.stepIndicator) < state.step); });
-  $("#step-caption").textContent = "Bước " + (state.step + 1) + " trên 3";
+  $("#step-caption").textContent = "Bước " + (state.step + 1) + " trên " + (LAST_STEP + 1);
   $("#onboarding-progress").value = state.step + 1;
   $("#step-back").hidden = state.step === 0;
-  $("#step-next").textContent = state.step === 2 ? (state.editing ? "Lưu thay đổi" : "Hoàn tất") : "Tiếp tục";
+  $("#step-next").textContent = state.step === LAST_STEP ? (state.editing ? "Lưu thay đổi" : "Hoàn tất") : "Tiếp tục";
   errorAt("#onboarding-error");
 }
 function validCurrentStep() {
@@ -419,7 +438,7 @@ function validCurrentStep() {
   errorAt("#onboarding-error");
   const invalid = [...active.querySelectorAll("input, select, textarea")].find(el => !el.checkValidity());
   if (invalid) { invalid.reportValidity(); invalid.focus(); return false; }
-  const missing = [...active.querySelectorAll("[data-member]")].find(el => el.querySelector("select").value === "known" && !el.querySelector("input:checked"));
+  const missing = [...active.querySelectorAll("[data-member]")].find(el => el.querySelector("select").value === "known" && !el.querySelector("input[type=checkbox]:checked") && !hereditaryFor(el.dataset.member).length);
   if (missing) {
     errorAt("#onboarding-error", "Hãy chọn bệnh đã biết cho " + MEMBERS.find(m => m.id === missing.dataset.member).label + ", hoặc chọn “Chưa rõ” và ghi chú thêm.");
     missing.querySelector("select").focus();
@@ -431,14 +450,20 @@ function readWizard() {
   return {
     display_name: $("#display-name").value.trim(),
     profile: { age: Number($("#age").value), sex: $("#sex").value, height_cm: Number($("#height").value), weight_kg: Number($("#weight").value),
-      smoker: $("#smoker").checked, activity_minutes_week: Number($("#activity").value), known_conditions: $$('#personal-conditions input:checked').map(el => el.value) },
-    family_history: MEMBERS.map(m => {
+      smoker: $("#smoker").checked, activity_minutes_week: Number($("#activity").value),
+      known_conditions: [...$$('#personal-conditions input:checked').map(el => el.value), ...hereditaryFor("self")] },
+    family_history: [...MEMBERS.map(m => {
       const el = $('[data-member="' + m.id + '"]');
-      const knowledge = el.querySelector("select").value;
-      return { member_id: m.id, relation: m.relation, side: m.side, knowledge,
-        affected_count: knowledge === "known" ? Math.min(10, Math.max(1, Math.round(Number(el.querySelector("[data-affected]")?.value) || 1))) : 1,
-        conditions: knowledge === "known" ? [...el.querySelectorAll("input:checked")].map(box => box.value) : [] };
-    }),
+      const extra = hereditaryFor(m.id);
+      // A hereditary condition picked on the last page makes the relative's history "known".
+      const knowledge = extra.length ? "known" : el.querySelector("select").value;
+      const cardKnown = el.querySelector("select").value === "known";
+      const affected = knowledge === "known" ? Math.min(10, Math.max(1, Math.round(Number(el.querySelector("[data-affected]")?.value) || 1))) : 1;
+      return { member_id: m.id, relation: m.relation, side: m.side, knowledge, affected_count: affected,
+        affected_brothers: m.id === "sibling" && knowledge === "known" ? Math.min(affected, Math.max(0, Math.round(Number(el.querySelector("[data-brothers]")?.value) || 0))) : 0,
+        conditions: [...(cardKnown ? [...el.querySelectorAll("input[type=checkbox]:checked")].map(box => box.value) : []), ...extra] };
+    }), ...(hereditaryFor("maternal-uncle").length ? [{ member_id: "maternal-uncle", relation: "uncle", side: "maternal", knowledge: "known", affected_count: 1, conditions: hereditaryFor("maternal-uncle") }] : [])],
+    parents_related: $('input[name="parents_related"]:checked')?.value || "unknown",
     personal_notes: $("#personal-notes").value.trim(), paternal_notes: $("#paternal-notes").value.trim(), maternal_notes: $("#maternal-notes").value.trim(),
     ai_consent: $("#ai-consent").checked, share_medications: Boolean(state.health?.share_medications), health_consent: $("#health-consent").checked,
   };
@@ -446,7 +471,7 @@ function readWizard() {
 async function nextStep(event) {
   event.preventDefault();
   if (!validCurrentStep()) return;
-  if (state.step < 2) {
+  if (state.step < LAST_STEP) {
     state.step++;
     showStep();
     $("#onboarding-form").scrollIntoView({ block: "start" });
@@ -732,7 +757,6 @@ function bmiLabel(bmi) {
   return bmi < 18.5 ? "Thiếu cân" : bmi < 23 ? "Bình thường" : bmi < 25 ? "Thừa cân" : "Béo phì";
 }
 function familyNode(h, member, extraClass = "") {
-  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const saved = h.family_history.find(row => row.member_id === member.id);
   const known = saved?.knowledge === "known" && saved.conditions?.length;
   const kind = known ? "known" : saved?.knowledge === "none" ? "none" : "unknown";
@@ -743,9 +767,8 @@ function familyNode(h, member, extraClass = "") {
     : '<button type="button" class="ft-node ft-edit-node own-only ' + kind + " " + extraClass + '" data-edit-member="' + member.id + '" aria-label="Sửa tiền sử của ' + esc(member.label) + '">' + content + "</button>";
 }
 function familySummary(h) {
-  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const known = h.family_history.filter(row => row.knowledge === "known" && row.conditions?.length);
-  const unknown = MEMBERS.length - h.family_history.filter(row => row.knowledge === "known" || row.knowledge === "none").length;
+  const unknown = MEMBERS.length - h.family_history.filter(row => MEMBERS.some(m => m.id === row.member_id) && (row.knowledge === "known" || row.knowledge === "none")).length;
   const tally = {};
   known.forEach(row => row.conditions.forEach(key => { tally[key] = (tally[key] || 0) + (row.affected_count || 1); }));
   const parts = [];
@@ -774,7 +797,6 @@ function sharedMedicationPanel() {
 }
 function renderProfile() {
   const h = state.health, p = h.profile;
-  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const conditions = p.known_conditions.map(conditionName).filter(Boolean);
   const bmi = p.weight_kg / (p.height_cm / 100) ** 2;
   const sex = { female: "Nữ", male: "Nam", other: "Khác / không khai báo" }[p.sex] || "Không khai báo";
@@ -840,7 +862,6 @@ function renderScores() {
 }
 function renderGenetics() {
   const h = state.health, p = h.profile;
-  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const member = id => MEMBERS.find(m => m.id === id);
   const conditions = p.known_conditions.map(conditionName).filter(Boolean);
   const notes = [["Bên nội", h.paternal_notes], ["Bên ngoại", h.maternal_notes]].filter(([, text]) => text);
@@ -873,7 +894,7 @@ function renderGenetics() {
         (raised.length ? section("raised", "Bệnh có người thân mắc", '<div class="risk-grid">' + raised.map(card).join("") + "</div>" + key) : "") +
         (diagnosed.length ? section("diagnosed", "Bệnh đã được chẩn đoán", '<div class="risk-grid">' + diagnosed.map(card).join("") + "</div>") : "") +
         (rest.length ? section("rest", "Các bệnh khác", restList) : "");
-  $("#genetics-content").innerHTML = risk +
+  $("#genetics-content").innerHTML = risk + (state.risk ? hereditarySection(section) : "") +
     section("tree", "Sơ đồ gia đình", '<article class="panel"><div class="ft-summary">' + familySummary(h) + "</div>" +
     '<div class="family-tree" role="group" aria-label="Sơ đồ gia đình ba thế hệ">' +
       '<span class="ft-side ft-side-p">Bên nội</span><span class="ft-side ft-side-m">Bên ngoại</span>' +
@@ -887,6 +908,25 @@ function renderGenetics() {
     '<ul class="ft-legend"><li><span class="ft-key known"></span>Có bệnh đã biết</li><li><span class="ft-key none"></span>Không có bệnh đã biết</li><li><span class="ft-key unknown"></span>Chưa rõ</li></ul>' +
     notes.map(([title, text]) => "<h3>Ghi chú " + title.toLowerCase() + "</h3><p>" + esc(text) + "</p>").join("") + "</article>", allUnknown ? "" : edit(false)) +
     '<p class="note">Thông tin tham khảo để trao đổi với bác sĩ, không phải chẩn đoán hay kết quả xét nghiệm gen.</p>';
+}
+
+// Single-gene hereditary conditions: flagged ones as cards, the others one line per status. Advice only, never a diagnosis.
+function hereditarySection(section) {
+  const screens = state.risk?.hereditary || [];
+  if (!screens.length) return "";
+  const label = id => id === "sibling" ? "Anh chị em ruột" : HEREDITARY_WHO.find(([who]) => who === id)?.[1];
+  const names = rows => rows.map(row => SCREENS[row.condition]).join(", ");
+  const flagged = screens.filter(row => row.status === "ask_doctor");
+  const card = row => '<article class="panel hereditary-card"><span class="tag info">' + icon("info") + "Nên hỏi bác sĩ</span><h3>" + SCREENS[row.condition] + "</h3>" +
+    '<p class="note">' + PATTERNS[row.pattern] + "</p>" + row.reasons.map(text => "<p>" + esc(text) + "</p>").join("") +
+    (row.relatives.length ? '<p class="risk-who"><span class="risk-who-label">Người thân liên quan</span>' + row.relatives.map(id => "<span>" + esc(label(id) || id) + "</span>").join("") + "</p>" : "") +
+    '<p class="risk-do"><strong>Nên làm:</strong> ' + esc(row.advice) + "</p></article>";
+  const line = (status, text, action = "") => { const rows = screens.filter(row => row.status === status); return rows.length ? "<p><strong>" + text + ":</strong> " + names(rows) + action + "</p>" : ""; };
+  const rest = line("diagnosed", "Đã được chẩn đoán") + line("not_seen", "Chưa thấy dấu hiệu") +
+    line("not_enough_info", "Chưa đủ thông tin", ' <button type="button" class="link-button own-only" data-edit-hereditary>Trả lời câu hỏi</button>');
+  return section("hereditary", flagged.length ? "Bệnh di truyền nên hỏi bác sĩ" : "Bệnh di truyền",
+    (flagged.length ? '<div class="risk-grid">' + flagged.map(card).join("") + "</div>" : "") + '<div class="panel hereditary-rest">' + rest +
+    '<p class="note">Dựa trên tiền sử gia đình bạn khai báo. Chỉ xét nghiệm gen do bác sĩ chỉ định mới xác định được bệnh.</p></div>');
 }
 
 // Doctor's report: an A4 page built from the user's readings, saved as PDF through the print dialog.
@@ -918,7 +958,6 @@ function renderReport() {
   const oldest = state.records.length >= 100 ? toDate(state.records.at(-1).created_at) : null;
   const cut = oldest && oldest.getTime() > Date.now() - days * 86400000;
   const h = state.health, p = h.profile, now = new Date();
-  const conditionName = key => CONDITIONS.find(([id]) => id === key)?.[1];
   const pad = n => String(n).padStart(2, "0");
   const code = "GS-" + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + "-" + pad(now.getHours()) + pad(now.getMinutes());
   const bmi = p.weight_kg / (p.height_cm / 100) ** 2;
@@ -1956,6 +1995,7 @@ function bindEvents() {
     const editMember = event.target.closest("[data-edit-member]");
     if (editMember) editProfile(1, editMember.dataset.editMember);
     else if (event.target.closest("[data-edit-family]")) editProfile(1);
+    else if (event.target.closest("[data-edit-hereditary]")) editProfile(LAST_STEP);
   });
   $("#edit-profile").addEventListener("click", () => editProfile());
   document.addEventListener("submit", event => { if (event.target.id === "care-form") acceptCareCode(event); });
