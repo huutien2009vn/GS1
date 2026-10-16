@@ -28,7 +28,9 @@
 /* Reserve the scrollbar lane so short pages (Giấy tờ) do not re-centre the layout. */
 html { scrollbar-gutter: stable; interpolate-size: allow-keywords; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); font-weight: 400; }
+body { margin: 0; background: #f5f9ff; font-weight: 400; }
+/* The login page's soft blue glow, fixed behind every screen so it looks the same at any scroll position (owner, 15 October 2026). */
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 80% 10%, #d9f3fb, transparent 65%); }
 ::selection { background: #cfe0f5; color: var(--ink); }
 h1, h2, h3, p, ul, dl { margin-top: 0; }
 h1, h2, h3 { font-weight: 600; line-height: 1.3; text-wrap: balance; }
@@ -238,6 +240,9 @@ body.nav-open { overflow: hidden; }
 .tag.safe { background: var(--green-bg); color: var(--green); }
 .tag.attention { background: var(--amber-bg); color: var(--amber); }
 .tag.alert { background: var(--red-bg); color: var(--red); }
+/* "Nên hỏi bác sĩ" on the hereditary screen: blue, so it reads as advice and is never confused with the amber risk levels. */
+.tag.info { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-soft); color: var(--blue); }
+.tag.info svg { width: 16px; height: 16px; }
 /* Family-risk tab. Level = colour + shape + word (as the status word on Today) plus a 3-step meter.
    Levels stop at amber; red stays reserved for dangerous readings. */
 .risk-level { font-size: 1.11rem; margin: 0; gap: 8px; }
@@ -484,7 +489,6 @@ ul.medicine-rows { padding: 0 24px; margin-bottom: 24px; }
 
 /* Login */
 .login-screen { min-height: 100dvh; display: flex; flex-direction: column; }
-.login-screen { background: radial-gradient(ellipse at 80% 10%, #d9f3fb, transparent 65%), #f5f9ff; }
 .login-main { display: grid; grid-template-columns: 1.15fr 1fr; align-items: center; gap: 36px 64px; width: 100%; max-width: 1040px; margin: auto; padding: 64px 24px; }
 .login-main > .legal-note { grid-column: 1 / -1; margin: 0; }
 .login-card { margin: 0; padding: 34px; border-color: #dce7f4; box-shadow: 0 18px 42px #16345e0d; }
@@ -626,6 +630,7 @@ details[open]::details-content { block-size: auto; }
 .medicine-print-status { flex: 0 0 auto; color: #344865; font-size: 8pt; white-space: nowrap; }
 @page { size: A4; margin: 14mm 12mm 16mm; @bottom-left { content: "GeneSense - phiếu tự ghi, không phải kết quả khám bệnh"; font-size: 8pt; } @bottom-right { content: "Trang " counter(page) "/" counter(pages); font-size: 8pt; } }
 @media print {
+  body::before { display: none; }
   html { scrollbar-gutter: auto; }
   body { background: #fff; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -869,3 +874,7 @@ body.no-glass .app-site-header, body.no-glass .nav-drawer, body.no-glass .mobile
   .facts-2col > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .facts-2col dd { text-align: left; }
 }
+.hereditary-card h3 { margin: 10px 0 2px; }
+.hereditary-card p { margin: 6px 0; }
+.hereditary-rest p { margin: 6px 0; }
+.hereditary-rest { margin-top: 16px; }

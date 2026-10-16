@@ -6,8 +6,8 @@ Read this before doing anything. It describes the current state only. The longer
 
 - **Project folder:** `F:\CLAUDE CODE\GeneSense-share` (Windows 11).
 - **Repository:** https://github.com/yosidalogarit/genesense (private).
-- **Branch:** `master` is at `a661d43` (PR #35 merged). Old merged branches stay: the owner chose to keep them (3 October 2026).
-- **Pull requests:** #1 to #35 are merged; none open (11 October 2026). Never branch from merged feature branches, always from an up-to-date `master`.
+- **Branch:** `master` is at `ecda4e1` (PR #36 merged). Old merged branches stay: the owner chose to keep them (3 October 2026).
+- **Pull requests:** #1 to #36 are merged (15 October 2026). Never branch from merged feature branches, always from an up-to-date `master`.
 - **Tests:** 37 backend tests pass with a plain `pytest` run.
 - **Service worker cache name:** `genesense-v65` (master and live after PR #35).
 - **Design critique scores so far:** 24, 25, 27 out of 40 for the whole app; 25 out of 40 for the "Di truyền" tab alone (1 October 2026); **27 out of 40 for the medicine schedule** (2 October 2026). The findings of the last two runs were fixed afterwards, but neither critique was re-run, so there is no newer score. Reports are in `.impeccable/critique/`. A session may list a bundled `anthropic-skills:impeccable`; invoking it loads the instructions, but its script folder did not exist on disk. Run the scripts from the local copy at `F:\CLAUDE CODE\.agents\skills\impeccable` (same instructions, with the binary).
@@ -86,7 +86,7 @@ GeneSense AI Core is a web app (PWA) for chronic-disease screening and home vita
 
 ### ESP32 demo board (owner's hardware, 11 October 2026)
 
-The owner has a small ESP32-S3 board with a screen and a speaker that now acts as a Bluetooth "measuring device" for GeneSense demos. The sketch is in the repository at `hardware/esp32-vitals-demo/` (with a README on wiring, settings and connecting); the owner's working copy is `Documents\Arduino\genesense\genesense.ino`.
+The owner has a small ESP32-S3 board with a screen and a speaker that now acts as a Bluetooth "measuring device" for GeneSense demos. The sketch is in the repository at `hardware/esp32-vitals-demo/` (with a README on wiring, settings and connecting, and `HANDOFF.md`, the full board handoff including the questions still open about it); the owner's working copy is `Documents\Arduino\genesense\genesense.ino`.
 
 - **Board:** silkscreen "XH-S3E-AI_V1.0", module Sparkle IoT XH-S3E, **ESP32-S3 N16R8** (16 MB flash, 8 MB octal PSRAM), AMS1117-3.3 regulator, USB-C.
 - **Pins confirmed by testing:** OLED 0.96" SSD1306 128×64 at I²C **0x3C, SDA = GPIO41, SCL = GPIO42**; I²S speaker amplifier **BCLK 15, LRCK 16, DOUT 7**; the **IO0** button (also the download-mode button) and **RST**. Not confirmed: the microphone (the XiaoZhi "bread-compact" layout puts it on 4/5/6), the RGB LED, and buttons on GPIO39 and GPIO40 (both have pull-ups).
@@ -235,6 +235,7 @@ The look the friend's redesign introduced (PR #24, merged through #25) is the de
 - Conditions tracked: hypertension, diabetes, cardiovascular disease, stroke, dyslipidemia, breast cancer, colorectal cancer. The last three were added at the owner's request. The owner declined collecting age at diagnosis.
 - The form records **how many siblings** are affected.
 - The 0 to 100 score keeps its formula; only its inputs were fixed (live from the profile, unknown relatives flagged, BMI from 23, cancers do not move it).
+- **Bệnh di truyền (single-gene screen, owner 15 October 2026):** thalassemia, G6PD deficiency, BRCA (breast and ovarian) and familial hypercholesterolemia, ruled by inheritance pattern in `backend/app/services/hereditary.py` (plan: `docs/plans/xac-dinh-benh-di-truyen.md`). Asked on a 4th wizard page "Bệnh di truyền trong gia đình" (who has each disease, including "Bạn" and "Cậu", plus "Bố mẹ có họ hàng gần"; the consent moved to that page); the siblings card asks how many affected siblings are brothers. Shown on Di truyền before the family tree: diseases flagged "Nên hỏi bác sĩ" as cards with a **blue** tag (never amber, so it is not read as a risk level), the rest one line per status. No percentages, no ages. Needs a clinician's review before anything beyond a demo.
 - On phones the bottom bar label is "Lịch sử" (the page heading stays "Lịch sử đo") so five items fit on one line.
 
 ### Public access
@@ -363,8 +364,10 @@ Ask the owner which one to do next. Rough priority order:
    - cleanup of old trial accounts in the **local** database (the 3-day cleanup only runs where `DEMO_PUBLIC=true`, that is on the live site and the tunnel).
 8. **Mobile app direction (discussed, nothing built):** Android first, by wrapping the existing site; iOS later because Safari has no Web Bluetooth. Before any store release the app needs PNG icons (192 and 512px) and an `apple-touch-icon`, notifications, offline entry, and a privacy policy page. HTTPS hosting with Neon is done.
 9. **Paging for readings beyond 100** (the report note is a stopgap).
-10. **ESP32 board with a real sensor:** wire a MAX30102 to the demo board and send real heart rate and SpO₂ instead of mock values (see "ESP32 demo board" in section 3).
-11. **Smaller polish items:**
+10. **"Xác định bệnh di truyền" (hereditary disease identification):** proposal in `docs/plans/xac-dinh-benh-di-truyen.md` (pattern screening for single-gene diseases, then genetic test results, then couples). Waiting on the owner's decisions in its section 7; nothing built.
+11. **Prescription-reading model (optional):** `ml/genesense_handwriting_finetune.ipynb` fine-tunes Qwen2.5-VL-3B on Colab (T4) to read prescriptions into GeneSense's medicine fields, with a demo mode and a scorer that can also score Gemini; `ml/build_notebook.py` regenerates it. Only the data, parsing and scoring cells were run (on this PC); the GPU cells were never run. Needs labelled, anonymised prescriptions. Train only if it beats Gemini on the same test set.
+12. **ESP32 board with a real sensor:** wire a MAX30102 to the demo board and send real heart rate and SpO₂ instead of mock values (see "ESP32 demo board" in section 3).
+13. **Smaller polish items:**
    - on a 375×812 screen, "Ghi chỉ số" and "Đo lại" sit partly under the bottom tab bar until the user scrolls;
    - the blood-pressure chart has no 180/120 danger line;
    - "Nên đi khám sớm" and "Nguy hiểm" use the same red tag. This is an open polish item, not an accepted exception; the owner has not chosen the fix, so ask (options: amber for "Nên đi khám sớm", or a different shape);
@@ -379,15 +382,15 @@ Ask the owner which one to do next. Rough priority order:
    - "Hiển thị thêm" shows all remaining readings at once (up to 97); the owner was offered steps of 10 and has not answered;
    - `PRODUCT.md` still says original images are never stored and does not mention the medicine schedule; it is in git, so it changes through a pull request;
    - findings of the medicine-schedule critique that were not acted on: no undo after deleting a medicine, no way to pause a medicine without deleting it, and the date field shows the browser's own date format.
-12. **Run the design critique again** to get a new score for the Di truyền tab, the medicine schedule and the whole app.
-13. **Giấy tờ, not yet verified:**
+14. **Run the design critique again** to get a new score for the Di truyền tab, the medicine schedule and the whole app.
+15. **Giấy tờ, not yet verified:**
    - `gemini-3.6-flash` as the fallback for documents and its handling of the repaired parsing (every verified scan ran on `gemini-3.1-flash-lite`);
    - a Vietnamese prescription through the medicine review step, and the "Chưa bắt đầu" and "Đã hết đợt" tags on real data;
    - the sideways scroll on a real Pixel 9 or iPhone: it was reproduced and fixed only for a page whose width changes after the charts were drawn; a fresh phone-width load never overflowed in Edge. If the owner still sees it, ask which tab;
    - a phone photo of a real paper document (rotation, glare, handwriting);
    - "Lưu ảnh" on a real phone (verified in Edge on a PC only, where the file downloads and the app stays in place). On an iPhone, Safari puts downloads in the Files app, not in Photos; inside in-app browsers such as Zalo a download may not be offered. The owner has **no plan for an iPhone-specific way** (the share sheet was offered and declined on 2 October 2026), so leave it as a plain download;
    - the profile picture: a real finger drag in the crop dialog, a rotated camera photo, "Xóa ảnh" through the UI, and the header link while viewing a relative.
-14. **Giấy tờ, possible next steps:** a glucose unit read from the document and converted in code instead of by the model; more data types than hereditary and cardiovascular; removing the reading when its document is deleted.
+16. **Giấy tờ, possible next steps:** a glucose unit read from the document and converted in code instead of by the model; more data types than hereditary and cardiovascular; removing the reading when its document is deleted.
 
 ## 7. How the work is done here (follow this flow)
 
