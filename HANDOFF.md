@@ -57,6 +57,8 @@ GeneSense là PWA theo dõi chỉ số sức khỏe tại nhà, bệnh sử gia 
 7. **Người thân:** người bệnh tạo mã mời, người chăm sóc liên kết và xem dữ liệu được chia sẻ dạng chỉ đọc; người bệnh có thể thu hồi. Lịch thuốc/tích đã uống chỉ chia sẻ khi tùy chọn `share_medications` được bật. Ảnh giấy tờ, email, ghi chú tự do và consent không nằm trong dữ liệu chia sẻ.
 8. **Hồ sơ/báo cáo:** thông tin cá nhân và gia đình, ảnh đại diện; phiếu tổng hợp cho bác sĩ qua hộp thoại in/lưu PDF của trình duyệt, ghi rõ không phải giấy tờ y tế chính thức.
 9. **Điều hướng/UI:** logo GeneSense mở drawer bên trái; header, drawer và thanh điều hướng điện thoại dùng nền blur; tương tác icon có nổi nhẹ khi hover/chạm. Drawer có overlay, khóa focus nền và hỗ trợ đóng bằng bàn phím. Thanh dưới điện thoại gồm Hôm nay, Lịch sử, Giấy tờ, Hồ sơ.
+10. **Sàng lọc bệnh di truyền đơn gen:** backend áp dụng quy tắc gợi ý hỏi bác sĩ cho thalassemia, G6PD, BRCA và tăng cholesterol gia đình dựa trên phả hệ; đây không phải chẩn đoán/xác suất và cần bác sĩ thẩm định trước khi dùng ngoài demo.
+11. **ESP32/UNIHIKER K10 demo:** mã Arduino cho board XH-S3E-AI gửi chỉ số Bluetooth giả lập để thử luồng nhập từ thiết bị; chưa có cảm biến thật và chưa xác nhận trên board vật lý. Xem `hardware/esp32-vitals-demo/README.md`.
 
 Đây là mô tả **tính năng trong mã** chứ không xác nhận đã được kiểm thử trên mọi điện thoại, máy đo, ảnh đơn thuốc hay trình duyệt. Các giới hạn chưa xác minh nằm ở mục 8.
 
@@ -132,6 +134,7 @@ Trong repo gốc, PR #24 vẫn là thay đổi **chưa merge** tại thời đi�
 ### Chưa xác minh đầy đủ
 
 - Chưa chạy luồng OCR bằng ảnh đơn thuốc tiếng Việt thực tế trên bản GS1; cần mẫu được phép sử dụng, che thông tin cá nhân, kiểm tra chữ viết tay/ảnh nghiêng/lóa và lỗi tên thuốc/liều/buổi uống. Không lưu thuốc tự động khi AI không chắc.
+- Notebook chuẩn bị fine-tune MedOCR-Vision bằng LoRA trên Colab cho bộ dữ liệu 100 ảnh nằm ở [`experiments/medocr_colab/`](experiments/medocr_colab/). Đây là thí nghiệm riêng, chưa chạy với dữ liệu người dùng và chưa tích hợp model vào backend GS1; README hướng dẫn manifest, chia tập và báo cáo CER/WER.
 - Chưa xác nhận đầy đủ trên iPhone/Safari, điện thoại Android thật, tải ảnh gốc trên điện thoại, máy Bluetooth cụ thể và in PDF nhiều trang bằng mắt. Web Bluetooth không có trên mọi trình duyệt.
 - Chưa kiểm thử end-to-end một bản **GS1 đã deploy** vì hiện không có deployment GS1. Google OAuth cũng cần cấu hình client/domain thật mới kiểm tra được.
 - Đánh giá lâm sàng theo `CLINICAL_REVIEW_CHECKLIST.md` chưa hoàn tất; không quảng bá điểm nguy cơ như kết quả y khoa đã được chứng nhận.

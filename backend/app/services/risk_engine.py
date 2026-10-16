@@ -5,6 +5,7 @@ import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from .hereditary import hereditary_screen
 from ..schemas import (
     AccountProfile,
     AIInsight,
@@ -50,8 +51,9 @@ def calculate_pgrs(payload: AssessmentCreate) -> float:
     for member in payload.family_history:
         relation_factor = 1.0 if member.relation in F1_RELATIONS else 0.55
         for condition in set(member.conditions):
-            burden += CONDITION_WEIGHTS[condition] * relation_factor * min(member.affected_count, 3)
-            if relation_factor == 1.0 and CONDITION_WEIGHTS[condition]:
+            weight = CONDITION_WEIGHTS.get(condition, 0.0)   # hereditary-screen conditions carry no weight
+            burden += weight * relation_factor * min(member.affected_count, 3)
+            if relation_factor == 1.0 and weight:
                 unique_close_conditions.add(condition)
 
     # Saturating curve prevents large families from making the score unbounded.
@@ -172,7 +174,7 @@ def _rule_tips(payload: AssessmentCreate, level: str, alerts: list[AlertItem]) -
                 "Giảm muối giúp hạ huyết áp ở nhiều người.")
         elif "hypertension" in known:
             tip("low", "Giữ nhịp đo huyết áp", "Đo vào cùng giờ mỗi ngày và uống thuốc đúng theo đơn của bác sĩ.",
-                f"Bạn đã khai báo tăng huyết áp; lần này là {reading}, trong ngưỡng theo dõi.")
+                f"Bạn đã khai báo tăng huyết áp; lần này là {reading}, ở mức an toàn.")
         elif family & {"hypertension", "stroke", "cardiovascular"}:
             tip("low", "Đo huyết áp định kỳ", "Đo ít nhất 1 lần mỗi tuần và ghi lại, kể cả khi thấy khỏe.",
                 f"Gia đình có tiền sử tim mạch hoặc huyết áp; lần này là {reading}.")
@@ -308,7 +310,8 @@ def risk_overview(account: AccountProfile, vital_score: float | None) -> dict:
                        "overall": None if vital_score is None else fuse(pgrs, brs, vital_score)},
             "relatives_unknown": sum(1 for m in account.family_history if m.knowledge == "unknown"),
             "relatives_total": len(account.family_history),
-            "conditions": family_risk(account)}
+            "conditions": family_risk(account),
+            "hereditary": hereditary_screen(account)}
 
 
 @dataclass

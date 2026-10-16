@@ -1,7 +1,7 @@
 // Small SVG trend chart: one y-axis, a reference band, 2px lines, >=8px markers,
 // a crosshair tooltip on hover/keyboard, and a direct label on the latest value.
 const NS = "http://www.w3.org/2000/svg";
-const HEIGHT = 200;
+const DEFAULT_HEIGHT = 200;
 const PAD = { top: 14, right: 52, bottom: 30, left: 42 };
 const valueFormat = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
 const pad = n => String(n).padStart(2, "0");
@@ -55,7 +55,7 @@ export class TrendChart {
     });
   }
 
-  // config: { unit, band: [lo, hi] | null, thresholds: [{ value, color, label }], min, max, times: [Date], series: [{ label, color, values: [number] }] }
+  // config: { unit, band: [lo, hi] | null, thresholds: [{ value, color, label }], min, max, times: [Date], series: [{ label, color, values: [number] }], height? }
   set(config) {
     this.config = config;
     this.active = -1;
@@ -73,6 +73,7 @@ export class TrendChart {
     const width = this.host.clientWidth;
     const c = this.config;
     if (!width || !c || !c.times.length) return;
+    const HEIGHT = c.height || DEFAULT_HEIGHT;
     const all = c.series.flatMap(s => s.values);
     // Round the axis to a readable step so ticks land on whole numbers (60, 100, 140...).
     const lo = Math.min(c.min, ...all), hi = Math.max(c.max, ...all);
@@ -101,6 +102,7 @@ export class TrendChart {
 
     for (const t of c.thresholds || []) {
       svg.append(el("line", { class: "chart-threshold", x1: PAD.left, x2: PAD.left + plotW, y1: y(t.value), y2: y(t.value), stroke: t.color }));
+      svg.append(el("text", { class: "chart-axis chart-threshold-label", x: PAD.left + 4, y: y(t.value) - 6, "text-anchor": "start" }, t.value));
     }
     this.cross = el("line", { class: "chart-cross hidden", y1: PAD.top, y2: PAD.top + plotH });
     svg.append(this.cross);
@@ -110,7 +112,9 @@ export class TrendChart {
       if (n > 1) svg.append(el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", ...(s.dash ? { "stroke-dasharray": s.dash } : { class: "chart-series-line", pathLength: 1 }) }));
       s.values.forEach((v, i) => {
         const last = i === n - 1;
-        svg.append(el("circle", { class: "chart-series-point", cx: x(i), cy: y(v), r: 4, fill: last ? s.color : "#fff", stroke: s.color, "stroke-width": 2 }));
+        // Readings over the threshold are an amber triangle, so attention is never told by position alone.
+        if (s.flags?.[i]) svg.append(el("polygon", { class: "chart-series-point chart-flag", points: [[x(i), y(v) - 8], [x(i) + 7, y(v) + 5], [x(i) - 7, y(v) + 5]].map(p => p.join(",")).join(" ") }));
+        else svg.append(el("circle", { class: "chart-series-point", cx: x(i), cy: y(v), r: 5, fill: last ? s.color : "#fff", stroke: s.color, "stroke-width": 2 }));
       });
       labels.push({ y: y(s.values[n - 1]), text: valueFormat.format(s.values[n - 1]) });
     }

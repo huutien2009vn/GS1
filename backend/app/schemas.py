@@ -4,11 +4,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
-Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer"]
-Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother"]
+# The last four are single-gene hereditary conditions for the "Bệnh di truyền" screen (services/hereditary.py);
+# they do not move the family-risk levels or the score.
+Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer",
+                    "ovarian_cancer", "thalassemia", "g6pd", "familial_hypercholesterolemia"]
+Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother", "uncle"]
 FamilyMember = Literal["father", "mother", "sibling", "paternal-grandfather", "paternal-grandmother",
-                       "maternal-grandfather", "maternal-grandmother"]
-MeasurementSource = Literal["manual", "ble", "simulation", "document"]
+                       "maternal-grandfather", "maternal-grandmother", "maternal-uncle"]
+# "device": a GeneSense measuring device (the UNIHIKER K10 sketch) handed the reading over through a link.
+MeasurementSource = Literal["manual", "ble", "simulation", "document", "device"]
 
 
 class ProfileInput(BaseModel):
@@ -32,13 +36,17 @@ class FamilyHistoryInput(BaseModel):
     member_id: str | None = None
     side: Literal["immediate", "paternal", "maternal"] = "immediate"
     knowledge: Literal["unknown", "none", "known"] = "unknown"
-    # How many people this entry stands for; only the "siblings" entry uses more than one.
+    # How many people this entry stands for; only the "siblings" and "maternal uncles" entries use more than one.
     affected_count: int = Field(default=1, ge=1, le=10)
+    # Of the affected siblings, how many are brothers (the rest are sisters). Needed for patterns seen in males.
+    affected_brothers: int = Field(default=0, ge=0, le=10)
 
     @model_validator(mode="after")
     def consistent_history(self):
         if self.knowledge == "none" and self.conditions:
             raise ValueError("Không thể chọn không có bệnh cùng với một bệnh đã biết.")
+        if self.affected_brothers > self.affected_count:
+            raise ValueError("Số anh em trai mắc bệnh không thể lớn hơn tổng số anh chị em mắc bệnh.")
         return self
 
 
@@ -49,6 +57,14 @@ class VitalSample(BaseModel):
     diastolic: float | None = Field(default=None, ge=30, le=180)
     spo2: float | None = Field(default=None, ge=50, le=100)
     glucose: float | None = Field(default=None, ge=20, le=600)
+    # Shown with the reading only; the safety ranges are the same for every context (clinical review pending).
+    glucose_context: Literal["fasting", "after_meal"] | None = None
+
+    @model_validator(mode="after")
+    def context_needs_glucose(self):
+        if self.glucose is None:
+            self.glucose_context = None
+        return self
 
 
 class AssessmentCreate(BaseModel):
@@ -144,6 +160,8 @@ class AccountProfile(BaseModel):
     ai_consent: bool = False
     # Medication data stays private unless the patient explicitly enables caregiver access.
     share_medications: bool = False
+    # Parents related by blood raise the chance of recessive hereditary conditions such as thalassemia.
+    parents_related: Literal["yes", "no", "unknown"] = "unknown"
     health_consent: Literal[True]
 
     @model_validator(mode="after")
@@ -167,8 +185,9 @@ class MeasurementCreate(BaseModel):
 
     @model_validator(mode="after")
     def require_measurement(self):
-        if self.client_id and self.source != "manual":
-            raise ValueError("Chỉ số đang chờ đồng bộ phải được nhập thủ công.")
+        # Manual readings use the id to sync once; device links use it so tapping the same link twice saves once.
+        if self.client_id and self.source not in {"manual", "device"}:
+            raise ValueError("Mã chống lưu trùng chỉ dùng cho chỉ số nhập tay hoặc từ máy đo GeneSense.")
         if self.vitals.timestamp is not None:
             if self.vitals.timestamp.tzinfo is None:
                 raise ValueError("Thời gian ghi nhận cần có múi giờ.")
