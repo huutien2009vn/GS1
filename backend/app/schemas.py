@@ -8,7 +8,8 @@ Condition = Literal["hypertension", "diabetes", "cardiovascular", "stroke", "dys
 Relation = Literal["father", "mother", "sibling", "grandfather", "grandmother"]
 FamilyMember = Literal["father", "mother", "sibling", "paternal-grandfather", "paternal-grandmother",
                        "maternal-grandfather", "maternal-grandmother"]
-MeasurementSource = Literal["manual", "ble", "simulation", "document"]
+# "device": a GeneSense measuring device (the UNIHIKER K10 sketch) handed the reading over through a link.
+MeasurementSource = Literal["manual", "ble", "simulation", "document", "device"]
 
 
 class ProfileInput(BaseModel):
@@ -175,8 +176,9 @@ class MeasurementCreate(BaseModel):
 
     @model_validator(mode="after")
     def require_measurement(self):
-        if self.client_id and self.source != "manual":
-            raise ValueError("Chỉ số đang chờ đồng bộ phải được nhập thủ công.")
+        # Manual readings use the id to sync once; device links use it so tapping the same link twice saves once.
+        if self.client_id and self.source not in {"manual", "device"}:
+            raise ValueError("Mã chống lưu trùng chỉ dùng cho chỉ số nhập tay hoặc từ máy đo GeneSense.")
         if self.vitals.timestamp is not None:
             if self.vitals.timestamp.tzinfo is None:
                 raise ValueError("Thời gian ghi nhận cần có múi giờ.")

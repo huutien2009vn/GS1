@@ -184,6 +184,25 @@ def test_profile_validation_and_partial_measurements(client):
     assert client.post("/api/assessments", json={"vitals": {"glucose": 110, "glucose_context": "bedtime"}}).status_code == 422
 
 
+def test_device_link_reading_is_labelled_and_saved_once(client):
+    login(client)
+    client.put("/api/profile", json=PROFILE)
+    taken = (datetime.now(timezone.utc) - timedelta(minutes=3)).replace(microsecond=0)
+    body = {"source": "device", "client_id": str(uuid4()),
+            "vitals": {"heart_rate": 78, "spo2": 97, "timestamp": taken.isoformat()}}
+    first = client.post("/api/assessments", json=body)
+    again = client.post("/api/assessments", json=body)
+    assert first.status_code == 201 and again.status_code == 201
+    assert again.json()["id"] == first.json()["id"]
+    assert first.json()["measurement_source"] == "device"
+    history = client.get("/api/assessments").json()
+    assert len(history) == 1 and history[0]["vitals"]["source"] == "device"
+    assert history[0]["created_at"].startswith(taken.strftime("%Y-%m-%dT%H:%M"))
+    # Only typed-in and device-link readings may carry the anti-duplicate id.
+    bluetooth = {"source": "ble", "client_id": str(uuid4()), "vitals": {"heart_rate": 70}}
+    assert client.post("/api/assessments", json=bluetooth).status_code == 422
+
+
 def test_idempotent_manual_sync_and_seven_day_bp_groups(client):
     login(client)
     client.put("/api/profile", json=PROFILE)
