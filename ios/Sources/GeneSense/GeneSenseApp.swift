@@ -14,7 +14,8 @@ struct RootView: View {
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
-            WebView(webView: web.webView)
+            // Edge to edge: the page itself pads for the Dynamic Island and home bar (env(safe-area-inset-*)).
+            WebView(webView: web.webView).ignoresSafeArea()
             if web.offline {
                 OfflineView { web.reload() }.transition(.opacity)
             }

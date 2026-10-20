@@ -33,6 +33,7 @@ final class WebModel: NSObject, ObservableObject {
         webView.isOpaque = false
         webView.backgroundColor = UIColor(Theme.background)
         webView.scrollView.backgroundColor = UIColor(Theme.background)
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.load(URLRequest(url: Self.home))
         // Never keep the launch mark up longer than this on a slow network.
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.ready = true }
@@ -92,9 +93,9 @@ final class WebModel: NSObject, ObservableObject {
       window.print = () => post({ type: "print" });
       addEventListener("DOMContentLoaded", () => {
         mark();
-        // App feel: no zoom when a form field gets focus.
+        // App feel: no zoom when a form field gets focus; the page fills the screen under the Dynamic Island.
         const viewport = document.querySelector('meta[name="viewport"]');
-        if (viewport) viewport.content += ", maximum-scale=1";
+        if (viewport) viewport.content += ", maximum-scale=1, viewport-fit=cover";
       });
     })();
     """
