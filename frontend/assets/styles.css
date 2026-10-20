@@ -555,8 +555,9 @@ dialog[open] { animation: dialog-in .34s var(--ease-smooth); }
 dialog[open]::backdrop { animation: fade-in .3s ease-out; }
 dialog.closing { animation: dialog-out .18s ease-in forwards; }
 dialog.closing::backdrop { animation: fade-out .18s ease-in forwards; }
-@keyframes dialog-in { from { opacity: 0; transform: translateY(var(--sheet-rise)) scale(.97); } }
-@keyframes dialog-out { to { opacity: 0; transform: translateY(var(--sheet-rise)) scale(.98); } }
+/* Translate and opacity only: a scale would make WebKit re-blur the frosted dialog on every frame. */
+@keyframes dialog-in { from { opacity: 0; transform: translateY(var(--sheet-rise)); } }
+@keyframes dialog-out { to { opacity: 0; transform: translateY(var(--sheet-rise)); } }
 .records-panel:not(.hidden), #history-readings-panel:not(.hidden), #history-charts-panel:not(.hidden) { animation: view-in .26s var(--ease-smooth); }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
@@ -917,7 +918,11 @@ body.no-glass .app-site-header, body.no-glass .nav-drawer, body.no-glass .mobile
 .ios-app .btn.primary { box-shadow: inset 0 1px 0 #ffffff73, inset 0 -2px 0 #0000002e, 0 2px 0 #0d2c5440; }
 .ios-app .btn.outline { background: #ffffff8c; border-color: #ffffffe6; box-shadow: inset 0 1px 0 #fff, inset 0 -2px 0 #0d2c5414, 0 2px 0 #0d2c541f; }
 .ios-app .btn:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 2px #0d2c5426; }
-@media (max-width: 760px) { :root { --sheet-rise: 48px; } }
+/* Phones: dialogs are bottom sheets, so a height change moves only the top edge instead of both. */
+@media (max-width: 760px) {
+  :root { --sheet-rise: 48px; }
+  dialog, .confirm-dialog { width: auto; max-width: none; margin: auto 8px calc(8px + env(safe-area-inset-bottom)); border-radius: 24px; }
+}
 
 /* The closed scrim stays out of rendering: a full-screen backdrop blur at opacity 0 still costs every frame on iOS. */
 .nav-scrim { visibility: hidden; transition: opacity .28s var(--ease-out), visibility 0s linear .28s; }
