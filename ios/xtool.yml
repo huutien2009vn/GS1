@@ -1,0 +1,4 @@
+version: 1
+bundleID: vn.genesense.app
+infoPath: Info.plist
+iconPath: Resources/AppIcon.png

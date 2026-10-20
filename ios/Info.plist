@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>GeneSense</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>NSCameraUsageDescription</key>
+    <string>GeneSense dùng camera để quét đơn thuốc và giấy tờ khám bệnh.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>GeneSense lưu ảnh giấy tờ vào thư viện ảnh khi bạn chọn Lưu ảnh.</string>
+    <!-- App-bound domains let the site's service worker run inside the app, so it opens from cache. -->
+    <key>WKAppBoundDomains</key>
+    <array>
+        <string>genesense-five.vercel.app</string>
+    </array>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+</dict>
+</plist>

@@ -898,3 +898,12 @@ body.no-glass .app-site-header, body.no-glass .nav-drawer, body.no-glass .mobile
 .hereditary-card p { margin: 6px 0; }
 .hereditary-rest p { margin: 6px 0; }
 .hereditary-rest { margin-top: 16px; }
+
+/* Inside the iPhone app only (ios/ adds .ios-app to <html>): frosted sheets and raised buttons that press down. */
+.ios-app { -webkit-tap-highlight-color: transparent; }
+.ios-app dialog { background: #ffffffb8; -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%); border: 1px solid #ffffffd9; border-radius: 24px; }
+.ios-app dialog::backdrop { background: #0d2c5440; }
+.ios-app .btn { border-radius: 14px; -webkit-touch-callout: none; transition-duration: .1s; }
+.ios-app .btn.primary { box-shadow: inset 0 1px 0 #ffffff73, inset 0 -2px 0 #0000002e, 0 2px 0 #0d2c5440; }
+.ios-app .btn.outline { background: #ffffff8c; border-color: #ffffffe6; box-shadow: inset 0 1px 0 #fff, inset 0 -2px 0 #0d2c5414, 0 2px 0 #0d2c541f; }
+.ios-app .btn:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 2px #0d2c5426; }

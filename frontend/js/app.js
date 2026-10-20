@@ -2159,6 +2159,20 @@ function bindEvents() {
   $("#medicine-delete").addEventListener("click", () => deleteMedicine(state.editingMedicine));
   $("#medical-camera-file").addEventListener("change", selectMedicalImage);
   $("#medical-document-file").addEventListener("change", selectMedicalImage);
+  // In the iPhone app (ios/), the camera button opens Apple's document scanner: edges found, page flattened.
+  if (window.gsNative?.scan) {
+    const camera = $("#medical-camera-file");
+    camera.parentElement.lastElementChild.textContent = "Quét giấy tờ";
+    camera.addEventListener("click", async event => {
+      event.preventDefault();
+      const blob = await window.gsNative.scan();
+      if (!blob) return;
+      const files = new DataTransfer();
+      files.items.add(new File([blob], "giay-to.jpg", { type: "image/jpeg" }));
+      camera.files = files.files;
+      camera.dispatchEvent(new Event("change"));
+    });
+  }
   $("#document-ai-consent").addEventListener("change", updateDocumentButton);
   $("#analyze-document").addEventListener("click", analyzeMedicalDocument);
   $("#analyze-another").addEventListener("click", resetMedicalUpload);
