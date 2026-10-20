@@ -1601,14 +1601,33 @@ function openMeasurement(mode = "manual") {
   errorAt("#measurement-error");
   $$("#measurement-form input[type=number]").forEach(input => fieldHint(input));
   openDialog($("#measurement-dialog"));
-  setMeasureMode(mode);
+  setMeasureMode(mode, false);
 }
-function setMeasureMode(mode) {
+const SMOOTH = "cubic-bezier(.3, .7, .2, 1)";
+let measureSwap = 0;
+// Switching Nhập tay / Kết nối máy đo: the old panel fades out, the sheet eases to its new height, the new panel fades up.
+async function setMeasureMode(mode, animate = true) {
+  const dialog = $("#measurement-dialog"), next = $(mode === "manual" ? "#manual-panel" : "#device-panel");
+  const current = ["#manual-panel", "#device-panel"].map(id => $(id)).find(panel => !panel.hidden);
+  $$("[data-measure-mode]").forEach(button => button.classList.toggle("active", button.dataset.measureMode === mode));
+  const token = ++measureSwap;
+  const motion = animate && current !== next && dialog.open && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (motion) {
+    const fade = current.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: "ease-in", fill: "forwards" });
+    // Never wait on the animation alone: a paused page (background tab) would leave the old panel up.
+    await Promise.race([fade.finished.catch(() => {}), new Promise(resolve => setTimeout(resolve, 160))]);
+    fade.cancel();
+    if (token !== measureSwap) return;
+  }
+  const from = dialog.offsetHeight;
   $("#manual-panel").hidden = mode !== "manual";
   $("#device-panel").hidden = mode !== "device";
-  $$("[data-measure-mode]").forEach(button => button.classList.toggle("active", button.dataset.measureMode === mode));
   if (mode === "manual") stopStreams();
   errorAt("#measurement-error");
+  if (!motion) return;
+  const to = dialog.offsetHeight, box = { overflow: "hidden", boxSizing: "border-box" };
+  if (from !== to) dialog.animate([{ ...box, height: from + "px" }, { ...box, height: to + "px" }], { duration: 300, easing: SMOOTH });
+  next.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: SMOOTH });
 }
 function freshValues() {
   const now = Date.now();
