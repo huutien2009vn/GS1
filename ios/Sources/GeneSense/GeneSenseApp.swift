@@ -16,6 +16,7 @@ struct RootView: View {
             Theme.background.ignoresSafeArea()
             // Edge to edge: the page itself pads for the Dynamic Island and home bar (env(safe-area-inset-*)).
             WebView(webView: web.webView).ignoresSafeArea()
+                .background(BluetoothSheet(ble: web.ble))
             if web.offline {
                 OfflineView { web.reload() }.transition(.opacity)
             }

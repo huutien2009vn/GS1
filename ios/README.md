@@ -7,6 +7,9 @@ What the shell adds to the web app:
 
 - **Document scanner.** In "Giấy tờ", "Quét giấy tờ" opens Apple's scanner (finds the page edges, flattens the photo).
   Up to 4 pages are joined into one JPEG under 8 MB and go through the normal upload.
+- **Bluetooth.** iPhone browsers have no Web Bluetooth, so "Kết nối" opens a native picker (devices advertising
+  heart rate, SpO₂, blood pressure or glucose, or named `GeneSense…`). The app subscribes and forwards raw
+  notification bytes to `frontend/js/ble.js`, which parses them exactly as on Chrome (`Bluetooth.swift`).
 - **Fast start.** The site is an app-bound domain (`WKAppBoundDomains` in `Info.plist`), so its service worker runs
   and the app opens from cache.
 - **App feel.** Launch mark, offline screen, no zoom on form fields, printing the doctor's report through AirPrint or
