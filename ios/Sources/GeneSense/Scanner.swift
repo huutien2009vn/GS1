@@ -2,8 +2,9 @@ import UIKit
 import VisionKit
 
 /// Delegate for Apple's document scanner. Hands back one JPEG of all pages, or nil when cancelled.
+/// VisionKit calls the delegate on the main thread, hence the main-actor conformance.
 @MainActor
-final class Scanner: NSObject, VNDocumentCameraViewControllerDelegate {
+final class Scanner: NSObject, @MainActor VNDocumentCameraViewControllerDelegate {
     private let done: (Data?) -> Void
 
     init(done: @escaping (Data?) -> Void) {
