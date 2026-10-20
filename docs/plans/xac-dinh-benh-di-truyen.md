@@ -1,6 +1,6 @@
 # Plan: "Xác định bệnh di truyền" (hereditary disease identification)
 
-Status: **approved in part** (15 October 2026). Owner's decisions: **layer A first, then B; C later**; start with **4 diseases** (thalassemia, G6PD deficiency, BRCA, familial hypercholesterolemia); shown **inside Di truyền**; the form adds **sex of affected siblings, parents closely related and mother's brothers**, and still **no ages**. Step 1 (backend rules) is PR #38. UI work needs mockups first (the owner's standing rule).
+Status: **layers A and B are partially implemented locally** (20 October 2026). Owner's sequence remains **A first, then B; C later**; initial disease set is **4 diseases** (thalassemia, G6PD deficiency, BRCA, familial hypercholesterolemia). Optional age at diagnosis is captured as context only; it does not affect risk levels or rules. Genetic report photos are transcribed for review and storage, but variant classification and live evidence synchronization remain out of scope. This local implementation is not clinically validated.
 
 ## 1. Where GeneSense is today
 
@@ -9,9 +9,9 @@ The "Di truyền" tab (`family_risk()` in `backend/app/services/risk_engine.py`,
 What it does **not** do:
 - **Single-gene (monogenic) hereditary diseases** such as thalassemia, G6PD deficiency or hemophilia, which follow inheritance patterns (dominant, recessive, X-linked) rather than a "more relatives = higher risk" count.
 - Spot **family patterns** that call for genetic counselling (for example breast and ovarian cancer on one side, or affected males on the mother's side).
-- Read or store **genetic test results** the user already has.
+- Classify genetic variants or automatically synchronize **ClinVar/ClinGen** submissions, review status, dates, or conflicts.
 
-The data model limits what is possible: the family form covers parents, siblings (with an affected count but no sex), and four grandparents. There are no aunts, uncles or cousins, no sex for siblings, no age at diagnosis (the owner declined it earlier) and no question about related parents (consanguinity).
+The data model covers parents, siblings (with an affected count and brother count), four grandparents, and the mother's brother in the hereditary screen. Optional age at diagnosis is stored as context only; there is not yet a clinician-reviewed early-onset rule.
 
 ## 2. What "xác định bệnh di truyền" should mean in GeneSense
 
@@ -20,7 +20,7 @@ GeneSense is not a medical device and cannot diagnose a genetic disease; only a 
 | Layer | What the user gets | Built from |
 |---|---|---|
 | **A. Pattern screening** (recommended first) | Per disease: "Nên hỏi bác sĩ về tư vấn di truyền / xét nghiệm" with the reason in plain words (which relatives, which pattern). | The family form, extended a little. |
-| **B. Genetic test results** | The user photographs a genetic test report; GeneSense extracts it for review and shows a "Đã xét nghiệm" status per disease. | The existing Giấy tờ pipeline (Gemini extraction + review before saving). |
+| **B. Genetic test results** | The user photographs a genetic test report; GeneSense transcribes visible fields for review and storage. Per-disease "Đã xét nghiệm" status remains future work. | The existing Giấy tờ pipeline (AI extraction + review before saving). |
 | **C. Carrier planning for couples** | When both partners' carrier status is known **from tests**, the textbook chance for a child (for example 25 % for two thalassemia carriers), with a referral line. | Layer B results of two linked accounts. |
 
 Out of scope (say no clearly): diagnosing from symptoms, interpreting raw DNA files (VCF, consumer DNA exports), and any percentage guessed from family history alone.
@@ -54,7 +54,7 @@ All in the stored profile JSON, with defaults so existing accounts keep working:
 - **Sex of affected siblings** (brothers and sisters counted separately), needed for X-linked patterns.
 - **Optional extra relatives:** maternal uncles and aunts, paternal uncles and aunts (count affected, like siblings). Needed for X-linked and dominant patterns; optional so the form stays short.
 - **Related parents** (cha mẹ có họ hàng gần): yes / no / không rõ.
-- **Age at diagnosis** ("trước 50 tuổi" yes/no per affected relative): makes the cancer and cholesterol rules much more accurate, but the owner declined collecting ages before. Decision needed.
+- **Age at diagnosis** (optional, earliest known for the selected relative): now collected for clinician-facing context only. Any rule that uses early-onset age needs separate clinical review and must not be inferred from this field yet.
 
 ## 5. Build steps
 
@@ -64,7 +64,7 @@ Each step is one pull request, with tests, and with mockups shown before any UI 
 2. **Form changes:** the new condition chips, sibling sex, optional uncles and aunts, related-parents question; schema validation and migration defaults; the family tree shows the new relatives.
 3. **Di truyền UI:** a new section "Bệnh di truyền nên hỏi bác sĩ" under the existing levels, one card per flagged disease (pattern in plain words, the relatives, next step), and an explainer of the three inheritance patterns. Mockups first.
 4. **Doctor's report:** a short "Gợi ý tư vấn di truyền" section.
-5. **Layer B, test results:** a "Kết quả xét nghiệm gen" document type in Giấy tờ; extraction prompt limited to the disease list and result type (carrier / affected / negative / unclear); review before saving; per-disease "Đã xét nghiệm" status. Stricter consent text (genetic data is sensitive personal data under Decree 13/2023).
+5. **Layer B, test results:** a "Kết quả xét nghiệm di truyền" document type in Giấy tờ; visible gene/variant/zygosity/lab classification/condition/source excerpt are transcribed verbatim and editable before saving. No automatic diagnosis or profile update. Manual ClinVar/ClinGen links are provided; syncing review status, dates, conflicts, and per-disease "Đã xét nghiệm" status remains future work. Genetic data needs separate privacy/legal review before real-world deployment.
 6. **Layer C, couples (later):** only between two linked accounts, only from test results, with textbook Mendelian odds and a referral line.
 
 ## 6. Safety and review

@@ -42,7 +42,7 @@ GeneSense là PWA theo dõi chỉ số sức khỏe tại nhà, bệnh sử gia 
 | Biểu đồ/thiết bị | `frontend/js/chart.js`, `frontend/js/ble.js` | SVG chart và Web Bluetooth khi trình duyệt/thiết bị hỗ trợ |
 | Client API/PWA | `frontend/js/api.js`, `frontend/sw.js`, `frontend/manifest.webmanifest` | Gọi API, cache shell tĩnh và manifest |
 | Vercel | `api/index.py`, `vercel.json`, `public/` | Một Python serverless function; `public/` trống có chủ đích |
-| Kiểm thử | `backend/tests/` | 37 bài test backend trong snapshot này |
+| Kiểm thử | `backend/tests/` | Backend regression tests; cần chạy lại sau thay đổi |
 
 Ứng dụng dùng SQLite mặc định tại `healthpredict.db` trong thư mục repo khi chạy máy cá nhân. Bản Vercel yêu cầu PostgreSQL (ví dụ Neon) và `SESSION_SECRET`; `api/index.py` từ chối SQLite trên Vercel. Không giả định GS1 đã có database, domain, biến môi trường hoặc tự động deploy.
 
@@ -51,14 +51,15 @@ GeneSense là PWA theo dõi chỉ số sức khỏe tại nhà, bệnh sử gia 
 1. **Hôm nay:** trạng thái từ lần đo phù hợp gần nhất, chỉ số, khuyến nghị, lối tắt tới các việc chính và nút ghi chỉ số. Tình huống cấp cứu dùng panel riêng, nút gọi 115 và ưu tiên cảnh báo.
 2. **Ghi chỉ số:** nhập tay; Web Bluetooth khi có thiết bị/trình duyệt tương thích; dữ liệu mẫu chỉ hiện cho tài khoản dùng thử. Lần đo được lưu với nguồn dữ liệu rõ ràng.
 3. **Lịch sử:** danh sách lần đo, bộ lọc dữ liệu thật/mẫu, biểu đồ SVG cho huyết áp, nhịp tim, SpO₂ và đường huyết; tóm tắt huyết áp 7 ngày phân nhóm sáng/tối. Thẻ chỉ số và biểu đồ có chuyển động khi lần đầu vào vùng nhìn thấy, hỗ trợ `prefers-reduced-motion`.
-4. **Thuốc và giấy tờ:** thêm/sửa/xóa thuốc bằng tay; lịch Sáng/Trưa/Chiều/Tối hoặc “Khi cần”; tích “Đã uống” theo buổi được lưu phía server; in lịch; ảnh đơn thuốc/giấy khám/kết quả xét nghiệm có bước phân tích AI rồi **xem, sửa, chọn từng mục trước khi lưu**. Không có lời khuyên đổi liều hoặc tương tác thuốc tự động.
+4. **Thuốc và giấy tờ:** thêm/sửa/xóa thuốc bằng tay; lịch Sáng/Trưa/Chiều/Tối hoặc “Khi cần”; tích “Đã uống” theo buổi được lưu phía server; in lịch; ảnh đơn thuốc/giấy khám/kết quả xét nghiệm có bước phân tích AI rồi **xem, sửa, chọn từng mục trước khi lưu**. Kết quả di truyền có các trường trích riêng (gen, biến thể, kết luận đúng như phiếu, kiểu gen, bệnh liên quan, trích đoạn); người dùng có thể sửa trước khi lưu. Không tự phân loại biến thể, không tự thêm kết quả gen thành chẩn đoán. Không có lời khuyên đổi liều hoặc tương tác thuốc tự động.
 5. **Ảnh giấy tờ:** ảnh gốc lưu trong IndexedDB của **thiết bị đang dùng**, không phải server; dữ liệu đã trích và người dùng xác nhận được lưu riêng. Xóa dữ liệu trình duyệt sẽ mất ảnh gốc. Không mặc định đồng bộ ảnh qua các máy.
-6. **Di truyền:** bệnh sử gia đình, mức nguy cơ theo từng bệnh và cây gia đình. Trên điện thoại mục này nằm trong **Hồ sơ**, không có nút riêng ở thanh dưới; vẫn có đường vào từ điều hướng bên trái/lối tắt trong ứng dụng.
+6. **Di truyền:** bệnh sử gia đình, mức nguy cơ theo từng bệnh và cây gia đình. Mục này nằm trong **Hồ sơ** và không còn là mục điều hướng riêng; có thể mở từ thẻ “Gia đình & di truyền” trong Hồ sơ hoặc liên kết ngữ cảnh trên phần giải thích điểm.
 7. **Người thân:** người bệnh tạo mã mời, người chăm sóc liên kết và xem dữ liệu được chia sẻ dạng chỉ đọc; người bệnh có thể thu hồi. Lịch thuốc/tích đã uống chỉ chia sẻ khi tùy chọn `share_medications` được bật. Ảnh giấy tờ, email, ghi chú tự do và consent không nằm trong dữ liệu chia sẻ.
 8. **Hồ sơ/báo cáo:** thông tin cá nhân và gia đình, ảnh đại diện; phiếu tổng hợp cho bác sĩ qua hộp thoại in/lưu PDF của trình duyệt, ghi rõ không phải giấy tờ y tế chính thức.
-9. **Điều hướng/UI:** logo GeneSense mở drawer bên trái; header, drawer và thanh điều hướng điện thoại dùng nền blur; tương tác icon có nổi nhẹ khi hover/chạm. Drawer có overlay, khóa focus nền và hỗ trợ đóng bằng bàn phím. Thanh dưới điện thoại gồm Hôm nay, Lịch sử, Giấy tờ, Hồ sơ.
-10. **Sàng lọc bệnh di truyền đơn gen:** backend áp dụng quy tắc gợi ý hỏi bác sĩ cho thalassemia, G6PD, BRCA và tăng cholesterol gia đình dựa trên phả hệ; đây không phải chẩn đoán/xác suất và cần bác sĩ thẩm định trước khi dùng ngoài demo.
-11. **ESP32/UNIHIKER K10 demo:** mã Arduino cho board XH-S3E-AI gửi chỉ số Bluetooth giả lập để thử luồng nhập từ thiết bị; chưa có cảm biến thật và chưa xác nhận trên board vật lý. Xem `hardware/esp32-vitals-demo/README.md`.
+9. **Điều hướng/UI:** logo GeneSense mở drawer bên trái; header, drawer và thanh điều hướng điện thoại dùng nền blur; tương tác icon có nổi nhẹ khi hover/chạm. Drawer hiển thị một danh sách phẳng gồm Hôm nay, Lịch sử đo, Thuốc & giấy tờ và Hồ sơ, không chia nhóm theo “Theo dõi” hay “Chăm sóc cá nhân”; có overlay, khóa focus nền và hỗ trợ đóng bằng bàn phím. Thanh dưới điện thoại giữ bốn mục tương ứng, với tên “Thuốc & giấy tờ” để khớp nội dung. Hồ sơ gom thông tin cá nhân cùng tóm tắt gia đình/di truyền; sơ đồ gia đình và nội dung đọc thêm trong trang Di truyền được thu gọn theo nhu cầu.
+10. **Sàng lọc bệnh di truyền đơn gen:** backend áp dụng quy tắc gợi ý hỏi bác sĩ cho thalassemia, G6PD, BRCA và tăng cholesterol gia đình dựa trên phả hệ; tuổi chẩn đoán tùy chọn chỉ được lưu để tóm tắt, không thay đổi điểm hay quy tắc. Trang có thông tin nhập môn và liên kết nguồn MedlinePlus. Đây không phải chẩn đoán/xác suất và cần bác sĩ thẩm định trước khi dùng ngoài demo.
+11. **Bằng chứng gen–bệnh:** hồ sơ kết quả có liên kết tìm kiếm ClinVar và ClinGen cùng hướng dẫn xem mức rà soát ClinVar. **Chưa có đồng bộ tự động** phân loại, số sao, ngày đánh giá hoặc kết luận mâu thuẫn; người dùng cần mở nguồn và trao đổi với chuyên gia.
+12. **ESP32/UNIHIKER K10 demo:** mã Arduino cho board XH-S3E-AI gửi chỉ số Bluetooth giả lập để thử luồng nhập từ thiết bị; chưa có cảm biến thật và chưa xác nhận trên board vật lý. Xem `hardware/esp32-vitals-demo/README.md`.
 
 Đây là mô tả **tính năng trong mã** chứ không xác nhận đã được kiểm thử trên mọi điện thoại, máy đo, ảnh đơn thuốc hay trình duyệt. Các giới hạn chưa xác minh nằm ở mục 8.
 
@@ -112,7 +113,7 @@ node --check frontend\js\chart.js
 git diff --check
 ```
 
-Snapshot trước khi cập nhật handoff có **37 test backend**; cần chạy lại trong môi trường mới để xác nhận. Test bao phủ đăng nhập/cô lập tài khoản, tài liệu, thuốc và tích đã uống, huyết áp tuần, chia sẻ người thân, AI parser, thuật toán nguy cơ. Đây không phải kiểm định y khoa hoặc kiểm thử giao diện toàn diện.
+Trong lượt cập nhật này, **52 test backend đã chạy đạt**. Test bao phủ đăng nhập/cô lập tài khoản, tài liệu, thuốc và tích đã uống, huyết áp tuần, chia sẻ người thân, AI parser, thuật toán nguy cơ và trích xuất kết quả gen giả lập. Đây không phải kiểm định y khoa hoặc kiểm thử giao diện toàn diện.
 
 Khi sửa frontend, kiểm tra thực tế ở kích thước điện thoại khoảng **375×812** và desktop; xem console/CSP, drawer bằng bàn phím, tab dưới, biểu đồ chạm/hover, `prefers-reduced-motion`. Sau khi đổi HTML/CSS/JS, tăng `CACHE` trong `frontend/sw.js` (snapshot hiện là `genesense-v47`) để tránh PWA giữ giao diện cũ. Khi sửa backend, khởi động lại server nếu reload không nhận code mới. Chỉ test thao tác ghi/xóa trên tài khoản và database thử nghiệm, không trên hồ sơ thật hay demo của người khác.
 

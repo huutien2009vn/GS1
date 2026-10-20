@@ -107,3 +107,15 @@ def test_hereditary_conditions_do_not_move_the_score_or_the_levels():
     assert {row["condition"] for row in overview["conditions"]} == {
         "hypertension", "diabetes", "cardiovascular", "stroke", "dyslipidemia", "breast_cancer", "colorectal_cancer"}
     assert len(overview["hereditary"]) == 4
+
+
+def test_optional_diagnosis_age_is_context_only_and_range_checked():
+    without_age = account(mother=["breast_cancer"])
+    with_age = account(mother={"conditions": ["breast_cancer"], "age_at_diagnosis": 42})
+    assert with_age.family_history[1].age_at_diagnosis == 42
+    plain_payload = AssessmentCreate(profile=without_age.profile, family_history=without_age.family_history, vitals={})
+    age_payload = AssessmentCreate(profile=with_age.profile, family_history=with_age.family_history, vitals={})
+    assert calculate_pgrs(plain_payload) == calculate_pgrs(age_payload)
+    assert risk_overview(without_age, None)["conditions"] == risk_overview(with_age, None)["conditions"]
+    with pytest.raises(ValueError):
+        account(mother={"conditions": ["breast_cancer"], "age_at_diagnosis": 121})

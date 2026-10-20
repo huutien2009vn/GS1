@@ -2,9 +2,8 @@
 
 Plain rules over who is affected, never a diagnosis and never a percentage: each condition either gets
 "ask_doctor" with the reasons, or "not_seen", "not_enough_info" or "diagnosed". The rules and every sentence
-still need a clinician's review (CLINICAL_REVIEW_CHECKLIST.md) before anything beyond a demo.
-ponytail: no ages are collected (owner's choice), so the "early onset" criteria of the BRCA and familial
-hypercholesterolemia guidelines are not used; add them if the form ever asks "diagnosed before 50".
+still need a clinician's review (CLINICAL_REVIEW_CHECKLIST.md) before anything beyond a demo. Optional age at
+diagnosis is stored only as context for the family tree/report; it does not change any rule or score.
 """
 from __future__ import annotations
 
@@ -47,7 +46,7 @@ def hereditary_screen(account: AccountProfile) -> list[dict]:
 
     screens = []
 
-    # Thalassemia: recessive. A child is affected when both parents carry the gene, so carriers look healthy.
+    # Family-history flag only: thalassemia subtypes can have different inheritance patterns; no genotype is inferred.
     who = affected("thalassemia")
     reasons = []
     if who:
@@ -97,7 +96,7 @@ def hereditary_screen(account: AccountProfile) -> list[dict]:
             relatives += affected("breast_cancer", side | {"sibling"})
     screens.append(result("brca", reasons, relatives, unknown("father", "mother")))
 
-    # Familial hypercholesterolemia: dominant. A known diagnosis, or high cholesterol in two generations on one side.
+    # Family-history flag only: inheritance depends on the cause; no genotype is inferred from a cholesterol history.
     reasons, relatives = [], []
     diagnosed_relatives = affected("familial_hypercholesterolemia")
     if diagnosed_relatives:

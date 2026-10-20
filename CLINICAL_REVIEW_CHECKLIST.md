@@ -7,7 +7,11 @@
 - Cách ứng dụng tổng hợp yếu tố nguy cơ từ bệnh sử gia đình và diễn đạt mức nguy cơ trên giao diện.
 - Tính dễ hiểu của phần giải thích, các hành động tiếp theo và giới hạn của điểm số.
 - Các ngưỡng cảnh báo chỉ số, cách ưu tiên cảnh báo cấp cứu và nội dung hướng người dùng gọi 115.
-- Sàng lọc bệnh di truyền đơn gen (`backend/app/services/hereditary.py`): thalassemia, thiếu men G6PD, ung thư vú/buồng trứng di truyền (BRCA) và tăng cholesterol gia đình. Cần xác nhận từng quy tắc theo kiểu di truyền (lặn, liên kết X, trội), câu chữ "nên hỏi bác sĩ" và lời khuyên, khi không có tuổi lúc chẩn đoán.
+- Sàng lọc bệnh di truyền đơn gen (`backend/app/services/hereditary.py`): thalassemia, thiếu men G6PD, ung thư vú/buồng trứng di truyền (BRCA) và tăng cholesterol gia đình. Cần xác nhận từng quy tắc, câu chữ "nên hỏi bác sĩ" và lời khuyên. Tuổi chẩn đoán hiện chỉ là thông tin tham khảo, chưa được dùng trong quy tắc.
+- Phần hướng dẫn bệnh di truyền và mô tả kiểu di truyền; xác nhận câu chữ không khái quát alpha/beta thalassemia, G6PD, BRCA hoặc FH quá mức.
+- Tuổi chẩn đoán được lưu tùy chọn cho tóm tắt gia đình; xác nhận tuổi không được diễn giải như chẩn đoán và không ảnh hưởng điểm/rule trước khi có quy trình thẩm định riêng.
+- Luồng phiếu xét nghiệm gen: độ chính xác trích xuất gen/biến thể/kiểu gen/kết luận nguyên văn, mức dễ sửa và so với ảnh gốc; đảm bảo VUS/uncertain và kết quả chưa rõ không bị đổi thành kết luận GeneSense.
+- Cách dẫn người dùng sang ClinVar/ClinGen và giải thích giới hạn: dữ liệu có thể có nhiều submitter/mức rà soát, thay đổi theo thời gian và chưa được GeneSense đồng bộ hoặc diễn giải tự động.
 - Ngưỡng đường huyết: ứng dụng ghi lúc đo (lúc đói, sau ăn hoặc không rõ) nhưng vẫn dùng một khoảng an toàn 70–180 mg/dL cho mọi lần đo. Cần quyết định có tách ngưỡng theo lúc đo hay không.
 - Cách xử lý hồ sơ thiếu, chưa rõ hoặc nhập không nhất quán; tránh khiến người dùng hiểu thiếu dữ liệu là nguy cơ thấp.
 - Mức độ phù hợp của cảnh báo “không thay thế chẩn đoán”; khả năng người dùng nhầm gợi ý theo dõi với chỉ định điều trị.

@@ -86,3 +86,44 @@ def test_medical_output_normalizes_unknown_date_and_empty_copy():
     assert analysis.title == "Tài liệu sức khỏe cần xem lại"
     assert analysis.review_required is True
     assert analysis.disclaimer
+
+
+def test_synthetic_genetic_report_is_verbatim_review_only():
+    output = json.dumps({
+        "document_type": "genetic_test_report",
+        "document_date": "2026-01-15",
+        "provider": "Phòng xét nghiệm giả lập",
+        "title": "Phiếu xét nghiệm di truyền mô phỏng",
+        "summary": "Một dòng kết quả giả lập để kiểm thử luồng trích xuất.",
+        "metrics": [],
+        "conditions": [],
+        "vitals": {"systolic": 120, "diastolic": 80, "heart_rate": None, "spo2": None, "glucose": None},
+        "own_conditions": ["breast_cancer"],
+        "family_conditions": [{"member": "mother", "condition": "breast_cancer"}],
+        "genetic_findings": [{
+            "gene": "SYNTH-GENE-01",
+            "variant": "c.123A>G",
+            "zygosity": "dị hợp tử (mô phỏng)",
+            "classification": "VUS — kết luận giả lập",
+            "condition": "Tình trạng mô phỏng",
+            "source_excerpt": "Kết quả giả lập; không phải dữ liệu người bệnh.",
+        }],
+        "medications": [],
+        "recommendations": [],
+        "warnings": [],
+        "confidence": "high",
+        "review_required": False,
+        "source": "ai",
+        "disclaimer": "",
+    }, ensure_ascii=False)
+
+    analysis = _medical_analysis_from_json(output)
+    finding = analysis.genetic_findings[0]
+    assert analysis.document_type == "genetic_test_report"
+    assert analysis.review_required is True
+    assert finding.gene == "SYNTH-GENE-01"
+    assert finding.variant == "c.123A>G"
+    assert finding.classification == "VUS — kết luận giả lập"
+    assert "không phân loại lại biến thể" in analysis.disclaimer
+    assert analysis.vitals.systolic is None
+    assert analysis.own_conditions == [] and analysis.family_conditions == []

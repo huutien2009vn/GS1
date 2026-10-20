@@ -23,13 +23,13 @@ A three-layer risk score that is explainable: a pedigree score from F1/F2 family
 ## Operating Context
 
 - Google OpenID Connect sign-in, or a demo account when Google is not configured.
-- First-run onboarding in 3 steps: personal info, close family, paternal/maternal lineage.
+- First-run onboarding in 4 steps: personal info, close family, paternal/maternal lineage, and selected hereditary conditions.
 - "Hôm nay" (Today) tab: status, latest readings, the two most relevant advice cards, and required actions only. Charts and the full advice set live in "Lịch sử đo" (History).
 - "Di truyền" (Family risk) tab: a family-history level per condition, the three-generation family tree, and a button to edit the family history. It is computed from the current profile and needs no reading. Conditions tracked: hypertension, diabetes, cardiovascular disease, stroke, dyslipidemia, breast cancer, colorectal cancer.
 - Family sharing: a person shares a one-time code; a relative signs in with their own account and sees that person's status, readings, charts, profile and family risk read-only.
 - Doctor's report: a monochrome A4 sheet printed through the browser. It lists relatives' conditions and readings and leaves the judgement to the doctor; it carries no risk levels and states that it is not an official document.
 - Readings come from manual entry, Web Bluetooth devices (heart rate, blood pressure, pulse oximeter, glucose), or sample readings. Sample readings are offered to trial accounts only, carry the source label "Dữ liệu mẫu", and otherwise count like any other reading (status, charts, report). The sample feature is a demo aid and is expected to be removed.
-- Users can photograph lab results, prescriptions, or checkup papers; AI extracts the content and the user must review and confirm before saving. Original images are never stored.
+- Users can photograph lab results, genetic test reports, prescriptions, or checkup papers; AI transcribes visible content and the user must review, edit and confirm before saving. Genetic findings are not used as a diagnosis or added to the health profile automatically. Original images are never stored on the server.
 
 ## Capabilities and Constraints
 
@@ -44,7 +44,8 @@ A three-layer risk score that is explainable: a pedigree score from F1/F2 family
 
 - No real testimonials, clinical validation, user counts, or press. Do not fabricate them.
 - Risk coefficients use demo reference ranges, not clinically calibrated data.
-- The family-history levels follow common family-history practice (closeness and number of affected relatives). They are not a validated clinical tool and use no age at diagnosis.
+- The family-history levels follow common family-history practice (closeness and number of affected relatives). They are not a validated clinical tool. Optional age at diagnosis is shown only as context for a clinician and does not change scores or screening rules.
+- Genetic report fields are copied from the uploaded report and can be corrected before saving. GeneSense does not normalize HGVS, classify variants, or automatically synchronize ClinVar/ClinGen classifications, review stars, dates, or conflicts; it provides links for the user to inspect those sources.
 - Assets: `frontend/assets/favicon.svg`, inline SVG icons in `frontend/js/icons.js`.
 
 ## Product Principles
