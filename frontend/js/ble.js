@@ -60,6 +60,8 @@ function parseGlucose(view) {
   return { glucose: molPerL ? raw * 18015.59 : raw * 100000 };
 }
 
+const nativeBle = () => window.gsNative?.ble;
+
 const PARSERS = {
   heartRate: parseHeartRate,
   bloodPressure: parseBloodPressure,
@@ -83,10 +85,11 @@ export class HealthBleClient extends EventTarget {
   }
 
   get supported() {
-    return Boolean(navigator.bluetooth);
+    return Boolean(navigator.bluetooth || nativeBle());
   }
 
   async connect() {
+    if (!navigator.bluetooth && nativeBle()) return this._connectNative();
     if (!this.supported) throw new Error("Trình duyệt này chưa hỗ trợ Web Bluetooth.");
     const optionalServices = Object.values(SERVICES).map((item) => item.service);
     this.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices });
@@ -121,7 +124,29 @@ export class HealthBleClient extends EventTarget {
     return this.device;
   }
 
+  // iPhone app (ios/): the app picks the device and hands over each notification's bytes; parsing stays here.
+  async _connectNative() {
+    const byService = Object.fromEntries(Object.entries(SERVICES).map(([name, item]) => [item.service.toString(16), name]));
+    const bytes = base64 => new DataView(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer);
+    nativeBle().onevent = (event) => {
+      if (event.type === "disconnected") { this.native = false; this._emit("disconnected", {}); return; }
+      const name = byService[event.service];
+      if (!name) return;
+      try {
+        this._publish(PARSERS[name](bytes(event.value)));
+      } catch (error) {
+        this._emit("error", { message: error.message });
+      }
+    };
+    const pairs = Object.values(SERVICES).map((item) => ({ service: item.service.toString(16), characteristic: item.characteristic.toString(16) }));
+    const device = await nativeBle().connect(pairs);
+    this.native = true;
+    this._emit("connected", { name: device.name || "Thiết bị BLE", services: device.services });
+    return device;
+  }
+
   disconnect() {
+    if (this.native) { this.native = false; nativeBle()?.disconnect(); }
     if (this.device?.gatt?.connected) this.device.gatt.disconnect();
   }
 

@@ -13,6 +13,7 @@ final class WebModel: NSObject, ObservableObject {
     @Published var ready = false
     @Published var offline = false
     let webView: WKWebView
+    let ble = Bluetooth()
     private var scanner: Scanner?
     private var downloads: [ObjectIdentifier: URL] = [:]
 
@@ -34,6 +35,7 @@ final class WebModel: NSObject, ObservableObject {
         webView.backgroundColor = UIColor(Theme.background)
         webView.scrollView.backgroundColor = UIColor(Theme.background)
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        ble.run = { [weak self] script in self?.webView.evaluateJavaScript(script, completionHandler: nil) }
         webView.load(URLRequest(url: Self.home))
         // Never keep the launch mark up longer than this on a slow network.
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.ready = true }
@@ -82,13 +84,19 @@ final class WebModel: NSObject, ObservableObject {
       const pending = new Map();
       let next = 0;
       const post = message => window.webkit.messageHandlers.gsNative.postMessage(message);
+      const call = (type, extra = {}) => new Promise((resolve, reject) => {
+        const id = ++next;
+        pending.set(id, { resolve, reject });
+        post({ type, id, ...extra });
+      });
+      const take = id => { const waiting = pending.get(id); pending.delete(id); return waiting; };
       window.gsNative = {
-        scan: () => new Promise(resolve => { const id = ++next; pending.set(id, resolve); post({ type: "scan", id }); }),
-        _resolve(id, base64) {
-          const resolve = pending.get(id);
-          pending.delete(id);
-          if (resolve) resolve(base64 ? new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: "image/jpeg" }) : null);
-        }
+        scan: () => call("scan").then(base64 => base64 ? new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: "image/jpeg" }) : null),
+        // ble.connect(pairs) resolves to { name, services } once subscribed; then events reach ble.onevent.
+        ble: { connect: pairs => call("ble.connect", { pairs }), disconnect: () => post({ type: "ble.disconnect" }), onevent: null },
+        _resolve(id, value) { take(id)?.resolve(value); },
+        _reject(id, name, message) { const waiting = take(id); if (waiting) waiting.reject(Object.assign(new Error(message), { name })); },
+        _ble(event) { window.gsNative.ble.onevent?.(event); }
       };
       window.print = () => post({ type: "print" });
       addEventListener("DOMContentLoaded", () => {
@@ -107,6 +115,8 @@ extension WebModel: WKScriptMessageHandler {
         switch body["type"] as? String {
         case "scan": scan(id: body["id"] as? Int ?? 0)
         case "print": printPage()
+        case "ble.connect": ble.connect(id: body["id"] as? Int ?? 0, pairs: body["pairs"] as? [[String: String]] ?? [])
+        case "ble.disconnect": ble.disconnect()
         default: break
         }
     }

@@ -8,6 +8,8 @@
     <string>1.0</string>
     <key>NSCameraUsageDescription</key>
     <string>GeneSense dùng camera để quét đơn thuốc và giấy tờ khám bệnh.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>GeneSense dùng Bluetooth để nhận nhịp tim, SpO₂ và huyết áp từ máy đo.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>GeneSense lưu ảnh giấy tờ vào thư viện ảnh khi bạn chọn Lưu ảnh.</string>
     <!-- App-bound domains let the site's service worker run inside the app, so it opens from cache. -->
