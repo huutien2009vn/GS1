@@ -42,8 +42,8 @@ a { color: var(--blue); text-underline-offset: 3px; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .55; }
-/* Yellow alone is under 3:1 on white; the dark outer ring keeps the focus mark visible on every surface. */
-:focus-visible { outline: 3px solid #f2b705; outline-offset: 2px; box-shadow: 0 0 0 7px var(--ink); }
+/* Focus: a solid blue ring (over 3:1 on the light surfaces) with a faint halo; the gap keeps it apart from blue buttons. */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; box-shadow: 0 0 0 8px #0756ce26; }
 [hidden], .hidden { display: none !important; }
 .icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
 .skip-link { position: absolute; left: 8px; top: -60px; z-index: 30; background: #fff; padding: 8px 14px; border: 2px solid var(--ink); }
@@ -59,7 +59,7 @@ input:not([type=checkbox]), select, textarea {
   width: 100%; min-height: 52px; padding: 10px 14px; font-weight: 400;
   border: 1px solid var(--line-strong); border-radius: 12px; background: #fff;
 }
-input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: var(--blue); outline: 3px solid #f2b705; outline-offset: 0; }
+input:not([type=checkbox]):focus, select:focus, textarea:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 1px var(--blue), 0 0 0 5px #0756ce2e; }
 textarea { resize: vertical; min-height: 0; }
 input[type=checkbox] { accent-color: var(--blue); width: 24px; height: 24px; margin: 2px 0 0; flex-shrink: 0; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -366,7 +366,7 @@ body.nav-open { overflow: hidden; }
 .photo-source { position: relative; min-height: 56px; white-space: normal; }
 .photo-source .icon { flex: 0 0 auto; }
 .photo-source input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-.photo-source:focus-within { outline: 3px solid #84b8ff; outline-offset: 3px; }
+.photo-source:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; box-shadow: 0 0 0 8px #0756ce26; }
 .document-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 94px; justify-content: center; padding: 16px; margin: 8px 0 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--bg); text-align: center; }
 /* Medicine schedule: one block per time of day, the same four everywhere. */
 .records-panel:not(.hidden) { animation: view-in .22s var(--ease-out); }
@@ -384,7 +384,7 @@ ul.medicine-rows { padding: 0 24px; margin-bottom: 24px; }
 .medicine-intake:has(input:checked) { border-color: #8ab99b; background: var(--green-bg); color: var(--green); }
 /* The checkbox stays for keyboards and screen readers; the pill is what people see and tap. */
 .medicine-intake input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.medicine-intake:has(input:focus-visible) { outline: 3px solid #f2b705; outline-offset: 2px; box-shadow: 0 0 0 7px var(--ink); }
+.medicine-intake:has(input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px; box-shadow: 0 0 0 8px #0756ce26; }
 .medicine-rows li { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .medicine-rows li:last-child { border-bottom: 0; }
 .medicine-rows .btn { min-height: 44px; min-width: 72px; padding: 6px 18px; }
