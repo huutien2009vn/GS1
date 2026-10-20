@@ -20,14 +20,17 @@ Files: `Sources/GeneSense/GeneSenseApp.swift` (screens and style), `WebModel.swi
 
 ## Build and install (Windows)
 
-One-time setup is in the plan (Phase 0): WSL Ubuntu on `F:\WSL\Ubuntu`, Swift 6.4, usbmuxd, xtool, `xtool setup`.
+One-time setup: WSL Ubuntu on `F:\WSL\Ubuntu` with Swift 6.4.1 (`/opt/swift`), `zip`, libimobiledevice and xtool,
+then `xtool setup` with the Apple ID.
 
-1. Plug in the iPhone. In PowerShell (admin the first time only):
-   ```
-   usbipd list
-   usbipd bind --busid <BUSID>
-   usbipd attach --wsl --busid <BUSID>
-   ```
+The iPhone connects through Windows, not USB passthrough: usbipd attached the phone but garbled the data mid-install
+(`Mux error (-8)`). What works:
+
+- the **Apple Devices** app (Microsoft Store), which runs Apple's driver on `127.0.0.1:27015`;
+- WSL in mirrored networking (`C:\Users\TBB\.wslconfig`: `networkingMode=mirrored`, `hostAddressLoopback=true`);
+- in Ubuntu, `USBMUXD_SOCKET_ADDRESS=127.0.0.1:27015` (set in `/etc/bash.bashrc`) and Ubuntu's own usbmuxd masked.
+
+1. Plug in the iPhone, unlock it. `idevice_id -l` in Ubuntu should list it.
 2. In Ubuntu:
    ```
    cd "/mnt/f/CLAUDE CODE/GeneSense-share/ios"
