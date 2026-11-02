@@ -4,7 +4,8 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "master": true
+      "master": true,
+      "feature/ai-assistant-responsive": true
     }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
