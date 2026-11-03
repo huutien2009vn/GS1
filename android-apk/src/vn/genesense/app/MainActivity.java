@@ -15,6 +15,8 @@ import android.webkit.WebSettings;
 import android.widget.Toast;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.Window;
+import android.graphics.Color;
 
 public class MainActivity extends Activity {
     private static final String HOME = "https://genesense-gs1.vercel.app/";
@@ -25,11 +27,22 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setStatusBarColor(Color.rgb(237, 246, 255));
+        getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().getDecorView().setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR |
+            android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         web = new WebView(this);
+        web.setBackgroundColor(Color.rgb(237, 246, 255));
         setContentView(web);
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setTextZoom(100);
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
         settings.setAllowFileAccess(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
         web.setWebViewClient(new WebViewClient() {
