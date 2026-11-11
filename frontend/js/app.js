@@ -1925,6 +1925,7 @@ const IOS_APP = navigator.userAgent.match(/GeneSenseiOS\/(\d+)\.(\d+)/);
 const LIVE_CAMERA = !IOS_APP || +IOS_APP[1] > 1 || +IOS_APP[2] >= 1;
 async function openQrScan() {
   if (state.viewing) { toast("Quay về hồ sơ của bạn để kết nối máy đo."); return; }
+  if (window.gsNative?.scanQR) { void nativeQrScan(); return; }
   const dialog = $("#qr-scan-dialog"), video = $("#qr-video");
   if (dialog.open) return;
   errorAt("#qr-scan-error");
@@ -1954,6 +1955,15 @@ async function openQrScan() {
     photoOnly(error?.name === "NotAllowedError" ? "Chưa được phép dùng camera. Hãy cho phép trong cài đặt, hoặc chụp ảnh mã QR."
       : "Không mở được camera. Hãy chụp ảnh mã QR.", true);
   }
+}
+// The iPhone app 1.2+ scans with its own full-screen camera (Apple's detector, instant); the page only reads the result.
+async function nativeQrScan() {
+  try {
+    const text = await window.gsNative.scanQR();
+    if (!text) return;
+    if (readScan(text)) useScan(text);
+    else toast("Đây không phải mã của máy đo GeneSense.", "error");
+  } catch (error) { toast(error.message || "Không mở được camera.", "error"); }
 }
 function photoOnly(text, problem = false) {
   $("#qr-view").classList.add("hidden");
