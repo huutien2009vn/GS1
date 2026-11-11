@@ -923,7 +923,7 @@ class App:
             if p:
                 why = ("Không vào được mạng, thử lại..." if p < 0 else
                        "Máy chủ chưa hỗ trợ máy đo (404)" if p == 404 else "Lỗi %d, thử lại..." % p)
-                c.text_c(W / 2, 210, why, ui.INK2, ui.SMALL)
+                c.wrap_c(210, why, ui.INK2, ui.SMALL, W - 32)
             return
         m = self.qr_matrix(url)
         if m:
