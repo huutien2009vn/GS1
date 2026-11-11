@@ -4,7 +4,8 @@ import WebKit
 
 /// Owns the web view that shows https://genesense-five.vercel.app and the bridge the page talks to.
 ///
-/// Page to app: `window.gsNative.scan()` (document scanner, resolves to a JPEG Blob or null) and `window.print()`.
+/// Page to app: `window.gsNative.scan()` (document scanner, resolves to a JPEG Blob or null),
+/// `window.gsNative.scanQR()` (device QR code, resolves to its text or null) and `window.print()`.
 /// Everything else is the normal web app; the page knows it runs here by the `ios-app` class on <html>.
 @MainActor
 final class WebModel: NSObject, ObservableObject {
@@ -20,7 +21,7 @@ final class WebModel: NSObject, ObservableObject {
     override init() {
         let config = WKWebViewConfiguration()
         config.limitsNavigationsToAppBoundDomains = true
-        config.applicationNameForUserAgent = "GeneSenseiOS/1.1"   // 1.1: inline camera video (the page checks this)
+        config.applicationNameForUserAgent = "GeneSenseiOS/1.2"   // 1.1: inline camera video; 1.2: native QR scanner (gsNative.scanQR)
         config.allowsInlineMediaPlayback = true      // the QR scanner's camera view plays inside the page
         let scripts = WKUserContentController()
         scripts.addUserScript(WKUserScript(source: Self.bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -62,6 +63,17 @@ final class WebModel: NSObject, ObservableObject {
         top.present(camera, animated: true)
     }
 
+    private func scanQR(id: Int) {
+        guard let top = topController() else { return finishQR(id, nil) }
+        top.present(QRScanner { [weak self] text in self?.finishQR(id, text) }, animated: true)
+    }
+
+    private func finishQR(_ id: Int, _ text: String?) {
+        let value = text.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: .fragmentsAllowed) }
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+        webView.evaluateJavaScript("window.gsNative._resolve(\(id), \(value))", completionHandler: nil)
+    }
+
     private func finishScan(_ id: Int, _ jpeg: Data?) {
         scanner = nil
         let value = jpeg.map { "\"" + $0.base64EncodedString() + "\"" } ?? "null"
@@ -93,6 +105,8 @@ final class WebModel: NSObject, ObservableObject {
       const take = id => { const waiting = pending.get(id); pending.delete(id); return waiting; };
       window.gsNative = {
         scan: () => call("scan").then(base64 => base64 ? new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: "image/jpeg" }) : null),
+        // scanQR() resolves to the QR code's text (or a typed code), or null when closed.
+        scanQR: () => call("scanQR"),
         // ble.connect(pairs) resolves to { name, services } once subscribed; then events reach ble.onevent.
         ble: { connect: pairs => call("ble.connect", { pairs }), disconnect: () => post({ type: "ble.disconnect" }), onevent: null },
         _resolve(id, value) { take(id)?.resolve(value); },
@@ -115,6 +129,7 @@ extension WebModel: WKScriptMessageHandler {
         guard let body = message.body as? [String: Any] else { return }
         switch body["type"] as? String {
         case "scan": scan(id: body["id"] as? Int ?? 0)
+        case "scanQR": scanQR(id: body["id"] as? Int ?? 0)
         case "print": printPage()
         case "ble.connect": ble.connect(id: body["id"] as? Int ?? 0, pairs: body["pairs"] as? [[String: String]] ?? [])
         case "ble.disconnect": ble.disconnect()
