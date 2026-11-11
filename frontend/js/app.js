@@ -31,7 +31,7 @@ const METRICS = [
   { key: "glucose", label: "Đường huyết", unit: "mg/dL", icon: "drop" },
 ];
 const KEYS = ["heart_rate", "systolic", "diastolic", "spo2", "glucose"];
-const LEVELS = { safe: "Trong ngưỡng tham khảo", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
+const LEVELS = { safe: "An toàn", attention: "Cần chú ý", alert: "Nên đi khám sớm", emergency: "Nguy hiểm", watch: "Cần theo dõi" };
 const SUMMARY_FALLBACK = { safe: "Các chỉ số vừa đo chưa chạm ngưỡng cảnh báo.", attention: "Có chỉ số cần theo dõi. Hãy đo lại.", alert: "Nguy cơ tổng hợp ở mức cao. Nên sắp xếp đi khám.", emergency: "Có chỉ số ở mức nguy hiểm." };
 const SOURCE_NAMES = { manual: "Nhập tay", ble: "Máy đo Bluetooth", simulation: "Dữ liệu mẫu", document: "Từ giấy tờ", device: "Máy đo GeneSense" };
 // Readings copied from a scanned document are history: dated by the document and never the current state.
@@ -608,26 +608,8 @@ function renderDashboard() {
   status.textContent = r ? LEVELS[level] : "Chưa có dữ liệu";
   $("#risk-summary").textContent = !r ? "Nhập chỉ số từ máy đo để xem đánh giá đầu tiên." : level === "emergency" ? SUMMARY_FALLBACK.emergency : level === "watch" ? "24 giờ qua có lần đo ở mức nguy hiểm." : r.insight.summary || SUMMARY_FALLBACK[level];
   $("#result-date").textContent = r ? "Đo lúc " + date(r.created_at) + ", " + SOURCE_NAMES[r.measurement_source].toLowerCase() : "";
-  const lastDay = r && localDay(new Date(r.created_at));
-  $("#today-reading-prompt").textContent = !state.viewing && r && level !== "emergency" && lastDay !== localDay()
-    ? "Hôm nay chưa có số đo mới." : "";
   // While the emergency panel is up it is the only call to action; the score would read as reassurance.
   $("#score-details").classList.toggle("hidden", !r || level === "emergency");
-  if (r) {
-    const readings = r.measured_vitals || {};
-    const recorded = METRICS.filter(m => readings[m.key] != null);
-    const missing = METRICS.filter(m => readings[m.key] == null);
-    const previous = state.records.find(row => row.id !== r.id && row.created_at < r.created_at &&
-      row.vitals?.source === r.measurement_source && row.vitals.systolic != null && row.vitals.diastolic != null);
-    const compareBP = r.measurement_source !== "simulation" && readings.systolic != null &&
-      readings.diastolic != null && previous;
-    $("#screening-evidence").textContent = [
-      recorded.length && "Có số đo " + recorded.map(m => m.label.toLowerCase()).join(", ") + ".",
-      missing.length && "Chưa ghi " + missing.map(m => m.label.toLowerCase()).join(", ") + ".",
-      compareBP && "Huyết áp " + readings.systolic + "/" + readings.diastolic + " mmHg. Lần trước cùng nguồn (" +
-        date(previous.created_at) + ") là " + previous.vitals.systolic + "/" + previous.vitals.diastolic + " mmHg."
-    ].filter(Boolean).join(" ");
-  }
   $("#new-measurement").classList.toggle("hidden", level === "emergency");
   $("#recent-emergency").classList.toggle("hidden", !recent);
   if (recent) $("#recent-emergency").textContent = "Lần đo lúc " + date(recent.created_at) + " ở mức nguy hiểm. Đo lại sau 1 giờ. Nếu lại ở mức nguy hiểm hoặc có triệu chứng, liên hệ bác sĩ ngay trong hôm nay.";
@@ -1156,47 +1138,6 @@ function analysisMarkup(analysis) {
   return '<div class="analysis-summary"><div class="record-meta"><span>' + esc(DOCUMENT_TYPES[analysis.document_type] || "Tài liệu sức khỏe") + '</span><span>' + esc(analysis.document_date ? date(analysis.document_date, false) : "Không rõ ngày") + '</span><span>' + esc(analysis.provider || "Không rõ cơ sở") + '</span></div><h3>' + esc(analysis.title) + '</h3><p>' + esc(analysis.summary) + "</p></div>" + metricRows + list("Thông tin bệnh được ghi", analysis.conditions) + medications + list("Đề xuất được ghi trên tài liệu", analysis.recommendations) + list("Điểm cần kiểm tra lại", analysis.warnings, "warning") + '<p class="analysis-disclaimer">' + esc(analysis.disclaimer) + "</p>";
 }
 
-function documentReviewFields(a) {
-  const field = (key, label, value, max, required = false) =>
-    '<label>' + label + '<input data-review="' + key + '" maxlength="' + max + '" value="' + esc(value || "") + '"' + (required ? " required" : "") + '></label>';
-  const metrics = a.metrics.map(m => '<fieldset class="field-grid" data-review-metric><legend>' + esc(m.name) + '</legend>' +
-    field("name", "Tên chỉ số", m.name, 120, true) + field("value", "Kết quả", m.value, 120, true) +
-    field("unit", "Đơn vị", m.unit, 40) + field("reference_range", "Khoảng tham chiếu", m.reference_range, 120) + '</fieldset>').join("");
-  return '<details class="record-details"><summary>Đối chiếu ảnh và sửa bản đọc</summary>' +
-    '<img class="review-original" src="' + esc(state.previewUrl) + '" alt="Ảnh giấy tờ bạn vừa chọn">' +
-    '<div class="field-grid">' + field("title", "Tên giấy tờ", a.title, 180, true) + field("provider", "Cơ sở", a.provider, 180) +
-    '<label>Ngày trên giấy tờ<input type="date" data-review="document_date" value="' + esc(a.document_date || "") + '"></label>' +
-    '<label class="full">Tóm tắt<textarea required maxlength="1200" data-review="summary">' + esc(a.summary) + '</textarea></label></div>' + metrics + '</details>';
-}
-
-function reviewedDocument() {
-  const a = structuredClone(state.pendingMedical.analysis);
-  const value = (host, key) => host.querySelector('[data-review="' + key + '"]').value.trim();
-  const form = $("#document-apply");
-  for (const key of ["title", "provider", "summary"]) a[key] = value(form, key);
-  a.document_date = value(form, "document_date") || null;
-  form.querySelectorAll("[data-review-metric]").forEach((row, i) => {
-    const metric = a.metrics[i];
-    for (const key of ["name", "value", "unit", "reference_range"]) {
-      const corrected = value(row, key);
-      if (corrected !== metric[key]) metric.flag = "unknown";
-      metric[key] = corrected;
-    }
-  });
-  if ($("#apply-vitals")?.checked) {
-    a.vitals = documentVitals();
-    a.document_date = $("#apply-date").value;
-  }
-  form.querySelectorAll("[data-apply-medicine]").forEach((row, i) => {
-    if (!row.querySelector("[data-med-on]").checked) return;
-    const med = a.medications[i];
-    const read = key => row.querySelector('[data-med="' + key + '"]').value.trim();
-    Object.assign(med, {name: read("name"), strength: read("strength"), dose: read("amount"), days: Number(read("days")), meal: read("meal")});
-    row.querySelectorAll("[data-med-slot]").forEach(input => { med[input.dataset.medSlot] = input.checked; });
-  });
-  return a;
-}
-
 function renderMedicalRecords() {
   if (!state.medicalRecords.length) {
     $("#medical-record-list").innerHTML = '<article class="panel empty-state"><h2>Chưa có giấy tờ nào</h2><p class="note">Giấy tờ đã lưu sẽ hiện ở đây.</p></article>';
@@ -1316,14 +1257,7 @@ function renderMedicineLink() {
   const link = $("#today-medicines");
   // The emergency panel stays the only call to action while it shows.
   link.classList.toggle("hidden", !count || (state.result && isEmergency(state.result)));
-  const slot = currentSlot();
-  const label = SLOTS.find(([key]) => key === slot)[1];
-  const scheduled = state.medications.filter(m => medicineActive(m) && m[slot]);
-  const checked = new Set((state.medicationIntakes || []).filter(row => row.slot === slot).map(row => row.medication_id));
-  const completed = scheduled.filter(m => checked.has(m.id)).length;
-  link.textContent = scheduled.length && state.medicationIntakes && state.intakesDay === localDay()
-    ? label + " · Đã ghi uống " + completed + "/" + scheduled.length + " loại thuốc · Xem lịch"
-    : "Xem lịch thuốc hôm nay (" + count + " loại)";
+  link.textContent = "Hôm nay có " + count + " loại thuốc. Xem lịch uống thuốc";
 }
 // The "Đã uống" ticks belong to one calendar day; after midnight they must be fetched again.
 const refreshIfNewDay = () => { if (state.intakesDay && state.intakesDay !== localDay()) { state.medicationIntakes = null; state.intakesDay = null; void refreshMedications(); } };
@@ -1604,7 +1538,7 @@ async function analyzeMedicalDocument() {
     if (epoch !== state.authEpoch) return;
     state.pendingMedical = result; state.pendingScan = scan;
     $("#document-analysis-preview").innerHTML = analysisMarkup(result.analysis) + '<p class="privacy-result">' + esc(result.privacy_note) + "</p>";
-    $("#document-apply").innerHTML = documentReviewFields(result.analysis) + applyMarkup(result.analysis);
+    $("#document-apply").innerHTML = applyMarkup(result.analysis);
     syncApplyMedicines();
     $("#upload-stage").classList.add("hidden");
     $("#review-stage").classList.remove("hidden");
@@ -1642,13 +1576,11 @@ async function saveMedicalRecord() {
   button.textContent = "Đang lưu…";
   const epoch = state.authEpoch;
   try {
-    const analysis = reviewedDocument();
-    const saved = await api.saveMedicalRecord({ analysis, document_hash: state.pendingMedical.document_hash, health_consent: true });
+    const saved = await api.saveMedicalRecord({ analysis: state.pendingMedical.analysis, document_hash: state.pendingMedical.document_hash, health_consent: true });
     if (epoch !== state.authEpoch) return;
     state.medicalRecords = [saved, ...state.medicalRecords.filter(record => record.id !== saved.id)];
     if (state.pendingScan) await scanRequest("readwrite", store => store.put(state.pendingScan, saved.id));
     renderMedicalRecords(); // the document is saved from here on, even if a later step fails
-    state.pendingMedical.analysis.document_date = analysis.document_date;
     await applyDocument(vitals);
     closeDialog($("#medical-upload-dialog"));
     navigate("records");
@@ -2379,10 +2311,6 @@ function bindEvents() {
   $("#save-medical-record").addEventListener("click", saveMedicalRecord);
   $("#document-apply").addEventListener("submit", event => event.preventDefault());
   $("#document-apply").addEventListener("change", event => {
-    $("#confirm-medical-record").checked = false;
-    $("#save-medical-record").disabled = true;
-    if (event.target.dataset.review === "document_date" && $("#apply-date")) $("#apply-date").value = event.target.value;
-    if (event.target.id === "apply-date") $('[data-review="document_date"]').value = event.target.value;
     if (event.target.id === "apply-vitals") $("#document-apply").querySelectorAll("[data-apply-vital], #apply-date").forEach(el => { el.disabled = !event.target.checked; });
     if (event.target.matches("[data-med-on]")) syncApplyMedicines();
     const card = event.target.closest("[data-apply-medicine]");
@@ -2471,20 +2399,7 @@ function bindEvents() {
   window.addEventListener("pageshow", event => { if (event.persisted) { clearAccount(); boot(); } });
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden || !state.user) return;
-    try {
-      const me = await api.me();
-      if (me.id !== state.user?.id) { clearAccount(); await boot(); }
-      else if (state.user.onboarding_completed && !state.busy && !state.viewing && !state.editing && !document.querySelector("dialog[open]")) {
-        const epoch = state.authEpoch;
-        await syncPendingAssessments();
-        const profile = await api.profile();
-        if (state.authEpoch !== epoch || state.editing || state.viewing || state.busy) return;
-        state.health = profile.health;
-        state.user = profile.user;
-        personalize();
-        await Promise.all([refreshRecords(), refreshRisk(), refreshMedicalRecords(), refreshMedications(), refreshCare()]);
-      }
-    }
+    try { const me = await api.me(); if (me.id !== state.user?.id) { clearAccount(); await boot(); } else { void syncPendingAssessments(); refreshIfNewDay(); } }
     catch (error) { if (error.status === 401) { clearAccount(); await boot(); } }
   });
 }
