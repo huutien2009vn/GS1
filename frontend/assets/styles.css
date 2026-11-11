@@ -28,7 +28,7 @@
 /* Reserve the scrollbar lane so short pages (Giấy tờ) do not re-centre the layout. */
 html { scrollbar-gutter: stable; interpolate-size: allow-keywords; }
 * { box-sizing: border-box; }
-body { margin: 0; background: #f5f9ff; font-weight: 400; }
+body { margin: 0; background: #f5f9ff; font-weight: 400; -webkit-tap-highlight-color: transparent; }
 /* The login page's soft blue glow, fixed behind every screen so it looks the same at any scroll position (owner, 15 October 2026). */
 body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 80% 10%, #d9f3fb, transparent 65%); }
 ::selection { background: #cfe0f5; color: var(--ink); }
