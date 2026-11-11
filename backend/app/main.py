@@ -425,6 +425,8 @@ async def save_medical_record(
         MedicalRecord.user_id == user.id, MedicalRecord.document_hash == payload.document_hash
     ))
     if existing:
+        existing.analysis = payload.analysis.model_dump(mode="json")
+        await session.commit()
         return MedicalRecordResult(id=existing.id, created_at=existing.created_at, analysis=existing.analysis)
     record = MedicalRecord(user_id=user.id, document_hash=payload.document_hash,
                            analysis=payload.analysis.model_dump(mode="json"))

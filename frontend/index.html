@@ -138,11 +138,14 @@
           <p id="risk-status" class="status-word neutral">Đang tải…</p>
           <p id="risk-summary" class="status-summary"></p>
           <p id="result-date" class="note"></p>
+          <p id="today-reading-prompt" class="note"></p>
           <p id="recent-emergency" class="inline-message warning hidden"></p>
           <div id="result-alerts" class="result-alerts" aria-live="polite"></div>
           <button class="btn primary own-only" id="new-measurement"><span data-icon="plus"></span>Ghi chỉ số</button>
           <button id="today-medicines" class="link-button today-medicines own-only hidden" data-open-medicines></button>
-          <details id="score-details" class="score-details hidden"><summary>Cách tính kết quả</summary>
+          <details id="score-details" class="score-details hidden"><summary>Vì sao có kết quả này?</summary>
+            <p id="screening-evidence"></p>
+            <p class="note">Điểm sàng lọc dùng quy tắc thử nghiệm. Khi đi khám, hãy mang theo số đo và tiền sử gia đình để bác sĩ đối chiếu.</p>
             <p>Điểm sàng lọc: <strong id="risk-score">-</strong> trên 100. Điểm càng thấp càng tốt.</p>
             <dl class="score-list"><div><dt>Tiền sử gia đình</dt><dd id="pgrs-score">-</dd></div><div><dt>Thể trạng</dt><dd id="brs-score">-</dd></div><div><dt>Chỉ số đo</dt><dd id="vital-score">-</dd></div></dl>
             <p id="score-family-note" class="note hidden"></p>

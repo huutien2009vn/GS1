@@ -512,6 +512,9 @@ ul.medicine-rows { padding: 0 24px; margin-bottom: 24px; }
 .demo-entry .note { margin: 8px 0 0; }
 
 /* Onboarding */
+.review-original { display: block; max-width: 100%; max-height: 52vh; object-fit: contain; margin: 12px auto; }
+[data-review-metric] { margin-top: 16px; }
+#today-reading-prompt:empty { display: none; }
 .onboarding-page { max-width: 760px; }
 .onboarding-form { margin-top: 24px; padding: 28px; }
 .step-progress { display: grid; gap: 8px; margin-bottom: 24px; color: var(--ink-2); font-weight: 600; }
