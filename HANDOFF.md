@@ -106,6 +106,10 @@ The owner's main demo device is now a DFRobot **UNIHIKER K10** (ESP32-S3, 240×3
 - **Sensor:** DFRobot **SEN0518** (MAX30102 with its own processor that outputs heart rate and SpO₂, about every 4 s) on the K10's I²C port, switch set to I2C, address 0x57. Without it the sketch falls back to clearly labelled mock values.
 - **What the sketch does:** a guided 30-second measurement (Vietnamese screen and voice, restarts when the board moves, drops odd readings and refuses to show a number when they disagree), the same safety words and emergency limits as the app (SpO₂ below 90 % or heart rate below 40 or above 150 shows "Gọi cấp cứu 115"), the standard Bluetooth Heart Rate and Pulse Oximeter services (it sends the final value five times, because the app averages the last five), a green start button (DFR0789 on P0), the last 100 results in flash with a history chart, a local results page, Wi-Fi set up from a phone by QR code, and a **"Xem bằng QR"** screen whose default QR is the GeneSense device link above (A switches to the local page). The local results page has a **"Xem trên GeneSense"** button and a "Lưu vào GeneSense" link per saved reading that has a time.
 
+### UNIHIKER M10 measuring device (owner's hardware, November 2026)
+
+The owner is moving the device to a DFRobot **UNIHIKER M10** (Linux, Python 3.7, 240×320 touch screen, buttons A/B, buzzer, USB-A port), smaller and without the green LED button. The Python program and its handoff are in `hardware/genesense-m10/`. It has the same measuring rules, forced GeneSense sign-in and upload as the K10, touch screens, history charts, reminders set by touch, a CSV log on the microSD card, and Gemini voice played on a USB sound card (the M10 has only a buzzer; the owner is trying a DFPlayer Pro with FIT0502 speakers). Written and tested on a PC only (11 November 2026); it has not run on the M10 yet. No Bluetooth phone link in this port.
+
 ## 4. Owner's decisions (do not reverse without asking)
 
 ### Design direction
