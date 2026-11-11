@@ -142,33 +142,20 @@
           <p id="recent-emergency" class="inline-message warning hidden"></p>
           <div id="result-alerts" class="result-alerts" aria-live="polite"></div>
           <button class="btn primary own-only" id="new-measurement"><span data-icon="plus"></span>Ghi chỉ số</button>
-          <details id="score-details" class="score-details"><summary id="score-details-summary">Dữ liệu nào được dùng trong đánh giá?</summary>
+          <button id="today-medicines" class="link-button today-medicines own-only hidden" data-open-medicines></button>
+          <details id="score-details" class="score-details hidden"><summary>Vì sao có kết quả này?</summary>
             <p id="screening-evidence"></p>
-            <div id="screening-score-content" class="hidden">
-              <p class="note">Điểm sàng lọc dùng quy tắc thử nghiệm. Khi đi khám, hãy mang theo số đo và tiền sử gia đình để bác sĩ đối chiếu.</p>
-              <p>Điểm sàng lọc: <strong id="risk-score">-</strong> trên 100. Điểm càng thấp càng tốt.</p>
-              <dl class="score-list"><div><dt>Tiền sử gia đình</dt><dd id="pgrs-score">-</dd></div><div><dt>Thể trạng</dt><dd id="brs-score">-</dd></div><div><dt>Chỉ số đo</dt><dd id="vital-score">-</dd></div></dl>
-              <p id="score-family-note" class="note hidden"></p>
-              <p class="note">Điểm minh họa, không phải chẩn đoán.</p>
-              <button class="link-button" data-nav="genetics">Xem nguy cơ theo từng bệnh</button>
-            </div>
+            <p class="note">Điểm sàng lọc dùng quy tắc thử nghiệm. Khi đi khám, hãy mang theo số đo và tiền sử gia đình để bác sĩ đối chiếu.</p>
+            <p>Điểm sàng lọc: <strong id="risk-score">-</strong> trên 100. Điểm càng thấp càng tốt.</p>
+            <dl class="score-list"><div><dt>Tiền sử gia đình</dt><dd id="pgrs-score">-</dd></div><div><dt>Thể trạng</dt><dd id="brs-score">-</dd></div><div><dt>Chỉ số đo</dt><dd id="vital-score">-</dd></div></dl>
+            <p id="score-family-note" class="note hidden"></p>
+            <p class="note">Điểm minh họa, không phải chẩn đoán.</p>
+            <button class="link-button" data-nav="genetics">Xem nguy cơ theo từng bệnh</button>
           </details>
         </article>
         </div>
 
-        <div class="dashboard-side-actions own-only">
-          <button class="assistant-entry panel" type="button" data-nav="assistant"><span class="assistant-entry-icon" data-icon="heart"></span><span><strong>Trợ lý AI</strong><small>Đối chiếu thông tin trong hồ sơ của bạn</small></span><span data-icon="chevron"></span></button>
-          <article id="dashboard-care-panel" class="panel dashboard-care-panel">
-            <h2>Chăm sóc hôm nay</h2>
-            <p id="today-medication-summary" class="note"></p>
-            <button id="today-medicines" class="btn outline full-width today-medicine-action" type="button" data-open-add-medicine>Thêm lịch thuốc</button>
-            <button class="dashboard-document-link" type="button" data-open-documents>
-              <span class="assistant-entry-icon" data-icon="document" aria-hidden="true"></span>
-              <span><strong>Chụp đơn &amp; giấy tờ</strong><small id="dashboard-doc-summary">AI đọc bản nháp để bạn kiểm tra trước khi lưu.</small></span>
-              <span data-icon="chevron" aria-hidden="true"></span>
-            </button>
-          </article>
-        </div>
+        <button class="assistant-entry panel own-only" type="button" data-nav="assistant"><span class="assistant-entry-icon" data-icon="heart"></span><span><strong>Trợ lý AI</strong><small>Đối chiếu thông tin trong hồ sơ của bạn</small></span><span data-icon="chevron"></span></button>
         </div>
 
         <section class="section" aria-labelledby="latest-title">
