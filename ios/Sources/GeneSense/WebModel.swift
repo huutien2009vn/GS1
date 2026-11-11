@@ -20,7 +20,7 @@ final class WebModel: NSObject, ObservableObject {
     override init() {
         let config = WKWebViewConfiguration()
         config.limitsNavigationsToAppBoundDomains = true
-        config.applicationNameForUserAgent = "GeneSenseiOS/1.0"
+        config.applicationNameForUserAgent = "GeneSenseiOS/1.1"   // 1.1: inline camera video (the page checks this)
         config.allowsInlineMediaPlayback = true      // the QR scanner's camera view plays inside the page
         let scripts = WKUserContentController()
         scripts.addUserScript(WKUserScript(source: Self.bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
