@@ -21,6 +21,7 @@ final class WebModel: NSObject, ObservableObject {
         let config = WKWebViewConfiguration()
         config.limitsNavigationsToAppBoundDomains = true
         config.applicationNameForUserAgent = "GeneSenseiOS/1.0"
+        config.allowsInlineMediaPlayback = true      // the QR scanner's camera view plays inside the page
         let scripts = WKUserContentController()
         scripts.addUserScript(WKUserScript(source: Self.bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = scripts
@@ -160,6 +161,13 @@ extension WebModel: WKUIDelegate {
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = action.request.url { UIApplication.shared.open(url) }
         return nil
+    }
+
+    /// The page may use the camera (the device QR scanner) without a second web prompt; iOS still asks once.
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(type == .camera ? .grant : .deny)
     }
 }
 
