@@ -611,8 +611,12 @@ function renderDashboard() {
   const lastDay = r && localDay(new Date(r.created_at));
   $("#today-reading-prompt").textContent = !state.viewing && r && level !== "emergency" && lastDay !== localDay()
     ? "Hôm nay chưa có số đo mới." : "";
-  // While the emergency panel is up it is the only call to action; the score would read as reassurance.
-  $("#score-details").classList.toggle("hidden", !r || level === "emergency");
+  // Keep the evidence path discoverable before the first reading, but never present routine scoring as reassurance during an emergency.
+  $("#score-details").classList.toggle("hidden", level === "emergency");
+  $("#score-details-summary").textContent = r ? "Vì sao có kết quả này?" : "Dữ liệu nào được dùng trong đánh giá?";
+  $("#score-details").open = !r;
+  $("#screening-score-content").classList.toggle("hidden", !r);
+  if (!r) $("#screening-evidence").textContent = "Chưa có số đo để đối chiếu. Sau lần đo đầu tiên, mục này sẽ nêu dữ liệu đã dùng và thông tin còn thiếu.";
   if (r) {
     const readings = r.measured_vitals || {};
     const recorded = METRICS.filter(m => readings[m.key] != null);
@@ -1162,7 +1166,7 @@ function documentReviewFields(a) {
   const metrics = a.metrics.map(m => '<fieldset class="field-grid" data-review-metric><legend>' + esc(m.name) + '</legend>' +
     field("name", "Tên chỉ số", m.name, 120, true) + field("value", "Kết quả", m.value, 120, true) +
     field("unit", "Đơn vị", m.unit, 40) + field("reference_range", "Khoảng tham chiếu", m.reference_range, 120) + '</fieldset>').join("");
-  return '<details class="record-details"><summary>Đối chiếu ảnh và sửa bản đọc</summary>' +
+  return '<details class="record-details" open><summary>Đối chiếu ảnh và sửa bản đọc</summary>' +
     '<img class="review-original" src="' + esc(state.previewUrl) + '" alt="Ảnh giấy tờ bạn vừa chọn">' +
     '<div class="field-grid">' + field("title", "Tên giấy tờ", a.title, 180, true) + field("provider", "Cơ sở", a.provider, 180) +
     '<label>Ngày trên giấy tờ<input type="date" data-review="document_date" value="' + esc(a.document_date || "") + '"></label>' +
@@ -1199,7 +1203,11 @@ function reviewedDocument() {
 
 function renderMedicalRecords() {
   if (!state.medicalRecords.length) {
-    $("#medical-record-list").innerHTML = '<article class="panel empty-state"><h2>Chưa có giấy tờ nào</h2><p class="note">Giấy tờ đã lưu sẽ hiện ở đây.</p></article>';
+    const intro = state.documentAiEnabled
+      ? "Chụp đơn thuốc, phiếu khám hoặc kết quả. AI tạo bản nháp để bạn đối chiếu, sửa rồi mới lưu."
+      : "Chụp hoặc chọn ảnh giấy tờ. Bạn có thể xem trước trước khi lưu.";
+    $("#medical-record-list").innerHTML = '<article class="panel empty-state document-empty-state"><h2>Chưa có giấy tờ sức khỏe</h2><p>' + esc(intro) + '</p><p class="note">Ảnh gốc chỉ lưu trên thiết bị này.</p></article>';
+    renderMedicineLink();
     return;
   }
   $("#medical-record-list").innerHTML = state.medicalRecords.map(record => {
@@ -1209,6 +1217,7 @@ function renderMedicalRecords() {
   }).join("");
   // The button appears only where this device still holds the scan.
   $$("[data-view-scan]").forEach(async button => { if (await scanRequest("readonly", store => store.getKey(button.dataset.viewScan))) button.classList.remove("hidden"); });
+  renderMedicineLink();
 }
 
 // Scans stay on this device: IndexedDB, keyed by the saved record's id. They are never sent back to the server.
@@ -1312,18 +1321,40 @@ const medicineHow = m => [m.amount, MEALS[m.meal]].filter(Boolean).join(", ");
 const medicineWhen = m => SLOTS.filter(([key]) => m[key]).map(([, label]) => label).join(", ") || "Khi cần";
 const medicineCourse = m => "Từ " + date(m.start_date + "T12:00:00", false) + (m.days ? ", " + m.days + " ngày" : ", uống lâu dài");
 function renderMedicineLink() {
-  const count = state.viewing ? 0 : state.medications.filter(m => medicineActive(m)).length;
+  const card = $("#dashboard-care-panel");
   const link = $("#today-medicines");
-  // The emergency panel stays the only call to action while it shows.
-  link.classList.toggle("hidden", !count || (state.result && isEmergency(state.result)));
+  // Emergency guidance remains the only dashboard action while an emergency is present.
+  card.classList.toggle("hidden", Boolean(state.result && isEmergency(state.result)));
+  const active = state.viewing ? [] : state.medications.filter(m => medicineActive(m));
   const slot = currentSlot();
   const label = SLOTS.find(([key]) => key === slot)[1];
-  const scheduled = state.medications.filter(m => medicineActive(m) && m[slot]);
+  const scheduled = active.filter(m => m[slot]);
   const checked = new Set((state.medicationIntakes || []).filter(row => row.slot === slot).map(row => row.medication_id));
   const completed = scheduled.filter(m => checked.has(m.id)).length;
-  link.textContent = scheduled.length && state.medicationIntakes && state.intakesDay === localDay()
-    ? label + " · Đã ghi uống " + completed + "/" + scheduled.length + " loại thuốc · Xem lịch"
-    : "Xem lịch thuốc hôm nay (" + count + " loại)";
+  const todaySlots = active.reduce((total, medicine) => total + SLOTS.filter(([key]) => medicine[key]).length, 0);
+  link.removeAttribute("data-open-medicines");
+  link.removeAttribute("data-open-add-medicine");
+  if (!active.length) {
+    $("#today-medication-summary").textContent = "Chưa có lịch thuốc. Nếu bạn đang dùng thuốc, thêm lịch để tiện theo dõi.";
+    link.textContent = "Thêm lịch thuốc";
+    link.setAttribute("data-open-add-medicine", "");
+  } else {
+    $("#today-medication-summary").textContent = scheduled.length
+      ? state.medicationIntakes && state.intakesDay === localDay()
+        ? label + ": đã ghi uống " + completed + "/" + scheduled.length + " loại thuốc."
+        : "Buổi " + label.toLowerCase() + ": " + scheduled.length + " loại thuốc trong lịch hôm nay."
+      : todaySlots
+        ? "Buổi " + label.toLowerCase() + " không có thuốc trong lịch. Hôm nay có " + todaySlots + " lượt uống đã lên lịch."
+        : "Chưa có thuốc theo khung giờ. Kiểm tra thuốc dùng khi cần trong lịch.";
+    link.textContent = "Xem lịch uống thuốc";
+    link.setAttribute("data-open-medicines", "");
+  }
+  const documentCount = state.medicalRecords.length;
+  $("#dashboard-doc-summary").textContent = documentCount
+    ? documentCount + " giấy tờ đã lưu · chụp thêm hoặc xem lại bản đọc."
+    : state.documentAiEnabled
+      ? "AI đọc bản nháp; bạn kiểm tra và sửa trước khi lưu."
+      : "Chụp hoặc chọn ảnh để lưu giấy tờ sức khỏe.";
 }
 // The "Đã uống" ticks belong to one calendar day; after midnight they must be fetched again.
 const refreshIfNewDay = () => { if (state.intakesDay && state.intakesDay !== localDay()) { state.medicationIntakes = null; state.intakesDay = null; void refreshMedications(); } };
@@ -2313,6 +2344,8 @@ function bindEvents() {
     const tab = event.target.closest("[data-records-tab]");
     if (tab) { state.recordsTab = tab.dataset.recordsTab; renderRecordsTab(); }
     if (event.target.closest("[data-open-medicines]")) { state.recordsTab = "medicines"; navigate("records"); }
+    if (event.target.closest("[data-open-add-medicine]")) { state.recordsTab = "medicines"; navigate("records"); openMedicine(); }
+    if (event.target.closest("[data-open-documents]")) { state.recordsTab = "documents"; navigate("records"); openMedicalUpload(); }
     if (event.target.closest("#medicine-print")) printMedicineSchedule();
     const historyTab = event.target.closest("[data-history-tab]");
     if (historyTab) showHistoryTab(historyTab.dataset.historyTab);
