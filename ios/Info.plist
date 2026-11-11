@@ -7,7 +7,7 @@
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>NSCameraUsageDescription</key>
-    <string>GeneSense dùng camera để quét đơn thuốc và giấy tờ khám bệnh.</string>
+    <string>GeneSense dùng camera để quét đơn thuốc, giấy tờ khám bệnh và mã QR của máy đo.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>GeneSense dùng Bluetooth để nhận nhịp tim, SpO₂ và huyết áp từ máy đo.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>

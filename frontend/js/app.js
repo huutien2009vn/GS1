@@ -1864,6 +1864,137 @@ async function pairDeviceByCode(event) {
   try { showDevicePair(code, (await api.devicePairInfo(code)).device_name); $("#device-pair-input").value = ""; }
   catch (error) { errorAt("#device-pair-form-error", error.message); }
 }
+// Scanning the device's QR code inside the app (Hồ sơ, or "Kết nối máy đo" when recording): the live camera, or a
+// photo of the code. BarcodeDetector where the browser has one; otherwise jsQR, loaded only when needed.
+const qr = { stream: null, read: null, timer: 0, epoch: 0, warned: 0 };
+function loadJsQR() {
+  if (window.jsQR) return Promise.resolve(window.jsQR);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/js/vendor/jsqr.min.js";
+    script.onload = () => window.jsQR ? resolve(window.jsQR) : reject(new Error("Không tải được bộ đọc mã QR."));
+    script.onerror = () => { script.remove(); reject(new Error("Không tải được bộ đọc mã QR. Kiểm tra mạng rồi thử lại.")); };
+    document.head.append(script);
+  });
+}
+async function qrReader() {
+  if (qr.read) return qr.read;
+  if ("BarcodeDetector" in window) {
+    try {
+      if ((await BarcodeDetector.getSupportedFormats()).includes("qr_code")) {
+        const detector = new BarcodeDetector({ formats: ["qr_code"] });
+        return (qr.read = async source => (await detector.detect(source))[0]?.rawValue || "");
+      }
+    } catch { /* fall back to jsQR */ }
+  }
+  const jsQR = await loadJsQR();
+  const canvas = document.createElement("canvas"), context = canvas.getContext("2d", { willReadFrequently: true });
+  return (qr.read = async (source, photo = false) => {
+    const w = source.videoWidth || source.width, h = source.videoHeight || source.height;
+    if (!w || !h) return "";
+    const scale = Math.min(1, (photo ? 1200 : 720) / Math.max(w, h));
+    canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    return jsQR(image.data, image.width, image.height, { inversionAttempts: photo ? "attemptBoth" : "dontInvert" })?.data || "";
+  });
+}
+// What a scanned code asks for: a device sign-in code, a K10 reading link, or nothing we know.
+function readScan(text) {
+  const value = String(text || "").trim();
+  const hashAt = value.indexOf("#");
+  const hash = hashAt < 0 ? "" : value.slice(hashAt);
+  if (hash.startsWith("#" + DEVICE_PAIR_ROUTE + "?")) {
+    const code = pairCode(new URLSearchParams(hash.slice(hash.indexOf("?") + 1)).get("ma"));
+    return validPairCode(code) ? { code } : null;
+  }
+  if (hash.startsWith("#" + DEVICE_IMPORT_ROUTE + "?")) return { link: hash };
+  const bare = pairCode(value);
+  return value.length <= 12 && validPairCode(bare) ? { code: bare } : null;
+}
+function stopQrCamera() {
+  qr.epoch++;
+  clearTimeout(qr.timer);
+  qr.stream?.getTracks().forEach(track => track.stop());
+  qr.stream = null;
+  $("#qr-video").srcObject = null;
+}
+async function openQrScan() {
+  if (state.viewing) { toast("Quay về hồ sơ của bạn để kết nối máy đo."); return; }
+  const dialog = $("#qr-scan-dialog"), video = $("#qr-video");
+  if (dialog.open) return;
+  errorAt("#qr-scan-error");
+  $("#qr-view").classList.remove("hidden");
+  openDialog(dialog);
+  const epoch = ++qr.epoch;
+  qrReader().catch(error => { if (epoch === qr.epoch) errorAt("#qr-scan-error", error.message); });
+  if (!navigator.mediaDevices?.getUserMedia) { noQrCamera("Trình duyệt này không mở được camera. Hãy chụp ảnh mã QR."); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+    if (epoch !== qr.epoch || !dialog.open) { stream.getTracks().forEach(track => track.stop()); return; }
+    qr.stream = stream;
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    scanFrame(epoch);
+  } catch (error) {
+    if (epoch !== qr.epoch) return;
+    noQrCamera(error?.name === "NotAllowedError" ? "Chưa được phép dùng camera. Hãy cho phép trong cài đặt, hoặc chụp ảnh mã QR."
+      : "Không mở được camera. Hãy chụp ảnh mã QR.");
+  }
+}
+function noQrCamera(text) {
+  $("#qr-view").classList.add("hidden");
+  errorAt("#qr-scan-error", text);
+}
+async function scanFrame(epoch) {
+  if (epoch !== qr.epoch) return;
+  const video = $("#qr-video");
+  try {
+    if (video.readyState >= 2) {
+      const read = await qrReader();
+      const text = await read(video);
+      if (epoch !== qr.epoch) return;
+      if (text && useScan(text)) return;
+    }
+  } catch { /* a frame that cannot be read: try the next one */ }
+  if (epoch === qr.epoch) qr.timer = setTimeout(() => scanFrame(epoch), 250);
+}
+async function scanQrPhoto(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  errorAt("#qr-scan-error");
+  try {
+    const read = await qrReader();
+    const bitmap = await createImageBitmap(file);
+    const text = await read(bitmap, true);
+    bitmap.close?.();
+    if (!text) { errorAt("#qr-scan-error", "Không thấy mã QR trong ảnh. Chụp gần hơn, để mã nằm giữa ảnh."); return; }
+    useScan(text, true);
+  } catch (error) { errorAt("#qr-scan-error", error.message || "Không đọc được ảnh này."); }
+}
+// True when the code was used (the scanner closes); a code that is not a GeneSense device's says so and keeps looking.
+function useScan(text, fromPhoto = false) {
+  const scan = readScan(text);
+  if (!scan) {
+    if (fromPhoto || Date.now() - qr.warned > 4000) {
+      qr.warned = Date.now();
+      errorAt("#qr-scan-error", "Đây không phải mã của máy đo GeneSense.");
+    }
+    return false;
+  }
+  stopQrCamera();
+  closeDialog($("#qr-scan-dialog"));
+  const epoch = state.authEpoch;
+  // Wait for the scanner to finish closing (and its history step) before the next dialog opens.
+  setTimeout(async () => {
+    if (epoch !== state.authEpoch) return;
+    if (scan.link) { location.hash = scan.link; return; }
+    try { showDevicePair(scan.code, (await api.devicePairInfo(scan.code)).device_name); }
+    catch (error) { toast(error.message, "error"); }
+  }, 350);
+  return true;
+}
 async function refreshDevices() {
   const epoch = state.authEpoch;
   try {
@@ -1880,7 +2011,8 @@ function renderDevices() {
     (devices.length ? '<div class="care-rows">' + devices.map(d => '<div class="care-row"><div class="care-row-main"><strong>' + esc(d.name) +
       '</strong><span class="note">Kết nối từ ' + esc(date(d.created_at, false)) + (d.last_seen_at ? ", gửi gần nhất lúc " + esc(date(d.last_seen_at)) : "") +
       '</span></div><button class="delete-record" data-remove-device="' + esc(d.id) + '">Ngắt kết nối</button></div>').join("") + "</div>"
-      : '<p class="note">Chưa có máy đo nào. Bật máy đo, rồi quét mã QR trên màn hình bằng điện thoại.</p>') +
+      : '<p class="note">Chưa có máy đo nào. Bật máy đo, rồi quét mã QR trên màn hình của nó.</p>') +
+    '<button class="btn primary" type="button" data-qr-scan>' + icon("scan") + "Quét mã QR máy đo</button>" +
     '<form id="device-pair-form" class="care-form"><label>Hoặc nhập mã trên màn hình máy đo<input id="device-pair-input" autocomplete="off" autocapitalize="characters" maxlength="16" required></label><button class="btn primary" type="submit">Kết nối</button></form>' +
     '<p id="device-pair-form-error" class="inline-message error hidden" role="alert"></p>';
 }
@@ -2249,6 +2381,7 @@ function bindEvents() {
     const removeTarget = event.target.closest("[data-remove-link]");
     if (removeTarget) removeCareLink(removeTarget.dataset.removeLink, removeTarget.dataset.removeKind);
     if (event.target.closest("#care-create")) createCareCode();
+    if (event.target.closest("[data-qr-scan]")) openQrScan();
     const removeDeviceTarget = event.target.closest("[data-remove-device]");
     if (removeDeviceTarget) removeDevice(removeDeviceTarget.dataset.removeDevice);
     if (event.target.closest("#exit-viewing")) exitViewing();
@@ -2270,6 +2403,9 @@ function bindEvents() {
   $("#device-pair-skip").addEventListener("click", () => closeDialog($("#device-pair-dialog")));
   // However the dialog closes without connecting, the code is dropped so it does not ask again.
   $("#device-pair-dialog").addEventListener("close", clearDevicePair);
+  $("#qr-scan-dialog").addEventListener("close", stopQrCamera);
+  $("#qr-photo-file").addEventListener("change", scanQrPhoto);
+  $("#device-qr-scan").addEventListener("click", () => { closeDialog($("#measurement-dialog")); setTimeout(openQrScan, 350); });
   $$("dialog").forEach(dialog => dialog.addEventListener("cancel", event => { event.preventDefault(); closeDialog(dialog); }));
   $("#delete-assessment").addEventListener("click", event => deleteAssessment(event.currentTarget.dataset.id));
   $("#new-measurement").addEventListener("click", () => openMeasurement());
@@ -2395,7 +2531,7 @@ function bindEvents() {
     delete event.target.dataset.layer;
     dropLayer();
   }, true);
-  window.addEventListener("pagehide", stopStreams);
+  window.addEventListener("pagehide", () => { stopStreams(); stopQrCamera(); });
   window.addEventListener("pageshow", event => { if (event.persisted) { clearAccount(); boot(); } });
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden || !state.user) return;
