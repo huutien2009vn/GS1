@@ -1919,32 +1919,47 @@ function stopQrCamera() {
   qr.stream = null;
   $("#qr-video").srcObject = null;
 }
+// The iPhone app before 1.1 cannot show live camera video inside the page (no inline playback): the view stayed
+// blank. There, and wherever the camera shows no picture, the scanner asks for a photo of the code instead.
+const IOS_APP = navigator.userAgent.match(/GeneSenseiOS\/(\d+)\.(\d+)/);
+const LIVE_CAMERA = !IOS_APP || +IOS_APP[1] > 1 || +IOS_APP[2] >= 1;
 async function openQrScan() {
   if (state.viewing) { toast("Quay về hồ sơ của bạn để kết nối máy đo."); return; }
   const dialog = $("#qr-scan-dialog"), video = $("#qr-video");
   if (dialog.open) return;
   errorAt("#qr-scan-error");
   $("#qr-view").classList.remove("hidden");
+  $("#qr-scan-hint").textContent = "Hướng camera vào mã QR trên màn hình máy đo GeneSense.";
+  $("#qr-photo").classList.replace("primary", "outline");
   openDialog(dialog);
   const epoch = ++qr.epoch;
   qrReader().catch(error => { if (epoch === qr.epoch) errorAt("#qr-scan-error", error.message); });
-  if (!navigator.mediaDevices?.getUserMedia) { noQrCamera("Trình duyệt này không mở được camera. Hãy chụp ảnh mã QR."); return; }
+  if (!LIVE_CAMERA) { photoOnly("Bấm Chụp ảnh mã, rồi chụp mã QR trên màn hình máy đo."); return; }
+  if (!navigator.mediaDevices?.getUserMedia) { photoOnly("Trình duyệt này không mở được camera. Hãy chụp ảnh mã QR.", true); return; }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
     if (epoch !== qr.epoch || !dialog.open) { stream.getTracks().forEach(track => track.stop()); return; }
     qr.stream = stream;
     video.srcObject = stream;
-    await video.play().catch(() => {});
+    // No picture after a few seconds (the camera is busy, or the browser will not play it here): use a photo.
+    setTimeout(() => {
+      if (epoch !== qr.epoch || video.videoWidth) return;
+      stopQrCamera();
+      photoOnly("Camera không hiện hình. Hãy chụp ảnh mã QR.", true);
+    }, 3500);
     scanFrame(epoch);
+    video.play().catch(() => {});   // not awaited: without a picture it may never settle
   } catch (error) {
     if (epoch !== qr.epoch) return;
-    noQrCamera(error?.name === "NotAllowedError" ? "Chưa được phép dùng camera. Hãy cho phép trong cài đặt, hoặc chụp ảnh mã QR."
-      : "Không mở được camera. Hãy chụp ảnh mã QR.");
+    photoOnly(error?.name === "NotAllowedError" ? "Chưa được phép dùng camera. Hãy cho phép trong cài đặt, hoặc chụp ảnh mã QR."
+      : "Không mở được camera. Hãy chụp ảnh mã QR.", true);
   }
 }
-function noQrCamera(text) {
+function photoOnly(text, problem = false) {
   $("#qr-view").classList.add("hidden");
-  errorAt("#qr-scan-error", text);
+  $("#qr-photo").classList.replace("outline", "primary");
+  if (problem) errorAt("#qr-scan-error", text);
+  else $("#qr-scan-hint").textContent = text;
 }
 async function scanFrame(epoch) {
   if (epoch !== qr.epoch) return;
