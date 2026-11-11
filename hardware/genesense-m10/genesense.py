@@ -921,7 +921,9 @@ class App:
             p = self.cloud.pair_problem
             c.text_c(W / 2, 188, "Chưa lấy được mã" if p else "Đang lấy mã...", ui.INK, ui.BOLD)
             if p:
-                c.text_c(W / 2, 210, "Không vào được mạng, thử lại..." if p < 0 else "Lỗi %d, thử lại..." % p, ui.INK2, ui.SMALL)
+                why = ("Không vào được mạng, thử lại..." if p < 0 else
+                       "Máy chủ chưa hỗ trợ máy đo (404)" if p == 404 else "Lỗi %d, thử lại..." % p)
+                c.text_c(W / 2, 210, why, ui.INK2, ui.SMALL)
             return
         m = self.qr_matrix(url)
         if m:
