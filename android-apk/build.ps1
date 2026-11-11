@@ -14,7 +14,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Java compile failed' }
 if ($LASTEXITCODE -ne 0) { throw 'JAR packaging failed' }
 & (Join-Path $tools 'd8.bat') --min-api 23 --lib $androidJar --output (Join-Path $build 'dex') (Join-Path $build 'classes.jar')
 if ($LASTEXITCODE -ne 0) { throw 'D8 failed' }
-& (Join-Path $tools 'aapt2.exe') link -o (Join-Path $build 'unsigned.apk') --manifest (Join-Path $root 'AndroidManifest.xml') -I $androidJar --min-sdk-version 23 --target-sdk-version 34
+& (Join-Path $tools 'aapt2.exe') compile --dir (Join-Path $root 'res') -o (Join-Path $build 'resources.zip')
+if ($LASTEXITCODE -ne 0) { throw 'Icon compilation failed' }
+& (Join-Path $tools 'aapt2.exe') link (Join-Path $build 'resources.zip') -o (Join-Path $build 'unsigned.apk') --manifest (Join-Path $root 'AndroidManifest.xml') -I $androidJar --min-sdk-version 23 --target-sdk-version 34
 if ($LASTEXITCODE -ne 0) { throw 'Android packaging failed' }
 Push-Location (Join-Path $build 'dex')
 try { & (Join-Path $tools 'aapt.exe') add (Join-Path $build 'unsigned.apk') 'classes.dex' }
